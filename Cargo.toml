@@ -6,3 +6,19 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+#sha3 = "0.10.1"
+bincode = "1"
+clap = { version = "3.1.8", features = ["derive"] }
+criterion = "0.3.5"
+hex = "0.4.3"
+more-asserts = "0.2.2"
+rand = "0.8.5"
+rust-incrhash = { path = "../rust-incrhash" }
+serde = { version = "1", features = ["derive"] }
+tiny-keccak = { version = "2.0.2", features = ["sha3"] }
+itertools = "0.10.3"
+thousands = "0.2.0"
+
+[[bench]]
+name = "main"
+harness = false
