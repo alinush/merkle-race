@@ -2,25 +2,27 @@ use crate::merkle_abstract::AbstractMerkle;
 use crate::merkle_crhf::HASH_LENGTH;
 use crate::tree_hasher::TreeHasherFunc;
 use more_asserts::assert_le;
-use rust_incrhash::RistBlakeIncHash;
+use serde::Serialize;
 use std::collections::BTreeMap;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::marker::PhantomData;
 use std::mem::size_of;
+use std::ops::{AddAssign, SubAssign};
 use tiny_keccak::{Hasher, Sha3};
 
 #[derive(Clone)]
-pub enum MerkleppHashValue {
-    Internal(RistBlakeIncHash),
+pub enum MerkleppHashValue<IncHash> {
+    Internal(IncHash),
     Leaf([u8; HASH_LENGTH]),
 }
 
-impl Default for MerkleppHashValue {
+impl<IncHash: Default> Default for MerkleppHashValue<IncHash> {
     fn default() -> Self {
-        MerkleppHashValue::Internal(RistBlakeIncHash::default())
+        MerkleppHashValue::Internal(IncHash::default())
     }
 }
 
-impl Debug for MerkleppHashValue {
+impl<IncHash: Display> Debug for MerkleppHashValue<IncHash> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MerkleppHashValue::Internal(incr_hash) => write!(f, "{}", incr_hash),
@@ -29,21 +31,57 @@ impl Debug for MerkleppHashValue {
     }
 }
 
-pub struct IncrementalHasher {
+pub struct IncrementalHasher<FastIncHash> {
     num_hashes: usize,
     arity: usize,
+    h: PhantomData<FastIncHash>,
 }
 
-impl IncrementalHasher {
+impl<FastIncHash> IncrementalHasher<FastIncHash> {
     fn new(arity: usize) -> Self {
         IncrementalHasher {
             num_hashes: 0,
             arity,
+            h: Default::default(),
         }
     }
 }
 
-impl TreeHasherFunc<String, MerkleppHashValue> for IncrementalHasher {
+// NOTE: We store children hashes in memory as IncrHash<CompressedRistretto, _>'s, but we hash them to
+// IncrHash<RistrettoPoints, _> since they are faster to add. This is why there are two paramters here
+fn hash_child<ChildIncHash, FastIncHash>(
+    i: usize,
+    child_hash: &MerkleppHashValue<ChildIncHash>,
+) -> FastIncHash
+where
+    ChildIncHash: Serialize,
+    for<'a> FastIncHash: From<&'a [u8]>,
+{
+    match child_hash {
+        MerkleppHashValue::Internal(incr_hash) => {
+            let mut bytes = bincode::serialize(incr_hash).unwrap();
+            assert_eq!(bytes.len(), 32);
+
+            bytes.append(bincode::serialize(&i).unwrap().as_mut());
+
+            FastIncHash::from(bytes.as_slice())
+        }
+        MerkleppHashValue::Leaf(leaf_hash) => {
+            let mut bytes = leaf_hash.to_vec();
+
+            bytes.append(bincode::serialize(&i).unwrap().as_mut());
+
+            FastIncHash::from(bytes.as_slice())
+        }
+    }
+}
+
+impl<IncHash, FastIncHash> TreeHasherFunc<String, MerkleppHashValue<IncHash>>
+    for IncrementalHasher<FastIncHash>
+where
+    IncHash: Default + Clone + Serialize + AddAssign<FastIncHash>,
+    for<'a> FastIncHash: Default + AddAssign + SubAssign + From<&'a [u8]>,
+{
     fn get_num_computations(&self) -> usize {
         self.num_hashes
     }
@@ -52,7 +90,7 @@ impl TreeHasherFunc<String, MerkleppHashValue> for IncrementalHasher {
         true
     }
 
-    fn hash_leaf_data(&mut self, _offset: usize, data: String) -> MerkleppHashValue {
+    fn hash_leaf_data(&mut self, _offset: usize, data: String) -> MerkleppHashValue<IncHash> {
         let mut hasher = Sha3::v256();
 
         let mut hash = [0u8; HASH_LENGTH];
@@ -60,39 +98,19 @@ impl TreeHasherFunc<String, MerkleppHashValue> for IncrementalHasher {
         hasher.update(data.as_bytes());
         hasher.finalize(&mut hash);
 
-        MerkleppHashValue::Leaf(hash)
+        MerkleppHashValue::<IncHash>::Leaf(hash)
     }
 
     fn hash_nodes(
         &mut self,
-        old_parent_hash: MerkleppHashValue,
-        mut old_children: Vec<MerkleppHashValue>,
-        new_children: &BTreeMap<usize, MerkleppHashValue>,
-    ) -> MerkleppHashValue {
+        old_parent_hash: MerkleppHashValue<IncHash>,
+        mut old_children: Vec<MerkleppHashValue<IncHash>>,
+        new_children: &BTreeMap<usize, MerkleppHashValue<IncHash>>,
+    ) -> MerkleppHashValue<IncHash> {
         // count the number of children whose hashes have changed
         let num_changes = new_children.len();
 
-        let hash_child = |i: usize, child_hash: &MerkleppHashValue| -> RistBlakeIncHash {
-            match child_hash {
-                MerkleppHashValue::Internal(incr_hash) => {
-                    let mut bytes = bincode::serialize(incr_hash).unwrap();
-                    assert_eq!(bytes.len(), 32);
-
-                    bytes.append(bincode::serialize(&i).unwrap().as_mut());
-
-                    RistBlakeIncHash::from(bytes.as_slice())
-                }
-                MerkleppHashValue::Leaf(leaf_hash) => {
-                    let mut bytes = leaf_hash.to_vec();
-
-                    bytes.append(bincode::serialize(&i).unwrap().as_mut());
-
-                    RistBlakeIncHash::from(bytes.as_slice())
-                }
-            }
-        };
-
-        let mut incr_hash = RistBlakeIncHash::default();
+        let mut incr_hash = IncHash::default();
         if num_changes > self.arity / 2 {
             // if more than half the siblings changed, just recompute the parent from scratch
             // since otherwise, we'd be computing more than self.arity incremental hashes
@@ -107,40 +125,51 @@ impl TreeHasherFunc<String, MerkleppHashValue> for IncrementalHasher {
             }
 
             // recompute parent's incremental hash from scratch
+            // NOTE: We use an intermediate FastIncHash representation for the incremental hashes
+            // to speed up their addition.
+            let mut acc = FastIncHash::default();
             for i in 0..old_children.len() {
-                incr_hash += hash_child(i, &old_children[i]);
+                acc += hash_child::<IncHash, FastIncHash>(i, &old_children[i]);
             }
+            incr_hash += acc;
         } else {
             // if less than half the siblings changed, incrementally update the parent
             incr_hash = match old_parent_hash {
-                MerkleppHashValue::Internal(hash) => hash,
+                MerkleppHashValue::<IncHash>::Internal(hash) => hash,
                 _ => unreachable!(),
             };
 
             // incrementally update parent hash
             let mut num_hashes = 0;
+            let mut acc = FastIncHash::default();
+
             for (pos, hash) in new_children {
                 num_hashes += 2;
-
-                incr_hash -= hash_child(*pos, &old_children[*pos]);
-                incr_hash += hash_child(*pos, hash);
+                acc -= hash_child::<IncHash, FastIncHash>(*pos, &old_children[*pos]);
+                acc += hash_child::<IncHash, FastIncHash>(*pos, hash);
             }
+
+            incr_hash += acc;
 
             self.num_hashes += num_hashes;
             assert_le!(num_hashes, self.arity);
         }
 
-        MerkleppHashValue::Internal(incr_hash)
+        MerkleppHashValue::<IncHash>::Internal(incr_hash)
     }
 }
 
-pub fn new_merklepp_rist(
+pub fn new_merklepp<IncHash, FastIncHash>(
     k: usize,
     h: usize,
-) -> AbstractMerkle<String, MerkleppHashValue, IncrementalHasher> {
+) -> AbstractMerkle<String, MerkleppHashValue<IncHash>, IncrementalHasher<FastIncHash>>
+where
+    IncHash: Clone + Default + Serialize + AddAssign<FastIncHash>,
+    for<'a> FastIncHash: Default + AddAssign + SubAssign + From<&'a [u8]>,
+{
     let hasher = IncrementalHasher::new(k);
 
-    println!("Merkle++ node is {} bytes", size_of::<MerkleppHashValue>());
+    println!("Node is {} bytes", size_of::<MerkleppHashValue<IncHash>>());
 
     AbstractMerkle::new(k, h, hasher)
 }

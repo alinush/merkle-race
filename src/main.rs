@@ -13,7 +13,9 @@ use std::time::Instant;
 use thousands::Separable;
 
 use clap::Parser;
-use merkle_race::merkle_pp::new_merklepp_rist;
+use merkle_race::merkle_pp::new_merklepp;
+use rust_incrhash::compressed_ristretto::CompRistBlakeIncHash;
+use rust_incrhash::ristretto::RistBlakeIncHash;
 
 /// Program to benchmark three types of Merkle trees: traditional CRHF-based Merkle,
 /// incrementally-hashed Merkle (or Merkle++), and VC-based Merkle (or Verkle)
@@ -25,11 +27,11 @@ struct Args {
     _type: String, // TODO: list options
 
     /// Tree arity
-    #[clap(short, long, default_value_t = 2)]
+    #[clap(short, long, default_value_t = 16)]
     arity: usize,
 
     /// Tree height
-    #[clap(short, long, default_value_t = 30)]
+    #[clap(short, long, default_value_t = 7)]
     height: usize,
 
     /// Number of leaves to update
@@ -62,7 +64,13 @@ fn main() {
             bench_merkle(&mut merkle, num_updates);
         }
         "merkle++" => {
-            let mut merklepp = new_merklepp_rist(args.arity, height);
+            let mut merklepp =
+                new_merklepp::<CompRistBlakeIncHash, RistBlakeIncHash>(args.arity, height);
+            bench_merkle(&mut merklepp, num_updates);
+        }
+        "merkle++naive" => {
+            let mut merklepp =
+                new_merklepp::<RistBlakeIncHash, RistBlakeIncHash>(args.arity, height);
             bench_merkle(&mut merklepp, num_updates);
         }
         _ => {

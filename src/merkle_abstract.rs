@@ -4,7 +4,6 @@ use crate::tree_hasher::TreeHasherFunc;
 use more_asserts::assert_le;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
-use std::fmt::Debug;
 use std::marker::PhantomData;
 
 // An abstract, "perfect" Merkle tree of arity k and height h, where "perfect" means the tree has
@@ -54,7 +53,7 @@ pub struct AbstractMerkle<LeafDataType, HashType, Hasher> {
 impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hasher>
 where
     LeafDataType: Clone,
-    HashType: Default + Debug + Clone,
+    HashType: Default + Clone,
     Hasher: TreeHasherFunc<LeafDataType, HashType>,
 {
     pub fn num_leaves(&self) -> usize {
