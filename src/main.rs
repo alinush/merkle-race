@@ -1,19 +1,14 @@
-use itertools::Itertools;
-use merkle_race::max_leaves;
-use merkle_race::merkle_abstract::AbstractMerkle;
-use merkle_race::merkle_crhf::new_merkle_sha3_256;
+use merkle_race::merkle::AbstractMerkle;
+use merkle_race::merkle_crhf::{new_merkle_sha3_256_from_leaves};
 use merkle_race::tree_hasher::TreeHasherFunc;
+use merkle_race::{max_leaves, random_updates};
 use more_asserts::assert_le;
-use rand::distributions::Alphanumeric;
-use rand::seq::IteratorRandom;
-use rand::Rng;
 use std::fmt::Debug;
-use std::iter::zip;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use thousands::Separable;
 
 use clap::Parser;
-use merkle_race::merkle_pp::new_merklepp;
+use merkle_race::merkle_pp::{new_merklepp_from_leaves};
 use rust_incrhash::compressed_ristretto::CompRistBlakeIncHash;
 use rust_incrhash::ristretto::RistBlakeIncHash;
 
@@ -22,122 +17,105 @@ use rust_incrhash::ristretto::RistBlakeIncHash;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Type of Merkle tree
+    /// Can be either: merkle_sha3, merkle++, merkle++naive
     #[clap(short, long)]
     _type: String, // TODO: list options
 
     /// Tree arity
-    #[clap(short, long, default_value_t = 16)]
+    #[clap(short, long)]
     arity: usize,
 
     /// Tree height
-    #[clap(short, long, default_value_t = 7)]
-    height: usize,
+    #[clap(short, long, required_unless_present("num-leaves"))]
+    height: Option<usize>,
+
+    /// Number of leaves
+    #[clap(short('l'), long, required_unless_present("height"))]
+    num_leaves: Option<usize>,
 
     /// Number of leaves to update
-    #[clap(short, long, default_value_t = 200000)]
+    #[clap(short('u'), long)]
     num_updates: usize,
 }
-
-const LEAF_LENGTH: usize = 32 + 64;
 
 fn main() {
     let args = Args::parse();
 
-    let height = args.height;
     let num_updates: usize = args.num_updates;
-    let max_leaves = max_leaves(args.arity, height);
 
-    println!(
-        "Allocating memory for arity-{} height-{} {}, to benchmark updating {} out of {} leaves",
-        args.arity,
-        height,
-        args._type,
-        num_updates.separate_with_commas(),
-        max_leaves.separate_with_commas()
-    );
+    let num_leaves;
+    match (args.height, args.num_leaves) {
+        (Some(h), None) => num_leaves = max_leaves(args.arity, h),
+        (None, Some(l)) => num_leaves = l,
+        (Some(_), Some(_)) => panic!("clap failed: it allowed both height and num leaves"),
+        (None, None) => panic!("clap failed: it did allow no height and no num leaves"),
+    }
+
+    // println!(
+    //     "Allocating memory for arity-{} height-{} {}, to benchmark updating {} out of {} leaves",
+    //     args.arity,
+    //     height,
+    //     args._type,
+    //     num_updates.separate_with_commas(),
+    //     max_leaves.separate_with_commas()
+    // );
     println!();
 
     match args._type.as_str() {
         "merkle_sha3" => {
-            let mut merkle = new_merkle_sha3_256(args.arity, height);
-            bench_merkle(&mut merkle, num_updates);
+            let mut merkle = new_merkle_sha3_256_from_leaves(args.arity, num_leaves);
+
+            bench_merkle(&mut merkle, num_leaves, num_updates);
         }
         "merkle++" => {
             let mut merklepp =
-                new_merklepp::<CompRistBlakeIncHash, RistBlakeIncHash>(args.arity, height);
-            bench_merkle(&mut merklepp, num_updates);
+                new_merklepp_from_leaves::<CompRistBlakeIncHash, RistBlakeIncHash>(args.arity, num_leaves);
+
+            bench_merkle(&mut merklepp, num_leaves, num_updates);
         }
         "merkle++naive" => {
             let mut merklepp =
-                new_merklepp::<RistBlakeIncHash, RistBlakeIncHash>(args.arity, height);
-            bench_merkle(&mut merklepp, num_updates);
+                new_merklepp_from_leaves::<CompRistBlakeIncHash, RistBlakeIncHash>(args.arity, num_leaves);
+
+            bench_merkle(&mut merklepp, num_leaves, num_updates);
         }
         _ => {
-            unreachable!()
+            println!("Unknown type of Merkle tree provided: {}", args._type)
         }
     }
 }
 
 fn bench_merkle<HashType, Hasher>(
     merkle: &mut AbstractMerkle<String, HashType, Hasher>,
+    num_leaves: usize,
     num_updates: usize,
 ) where
     HashType: Clone + Debug + Default,
     Hasher: TreeHasherFunc<String, HashType>,
 {
-    let update_prefix = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(LEAF_LENGTH)
-        .map(char::from)
-        .collect::<String>();
-    let update_prefix_slice = update_prefix.as_str();
-
-    println!("Leaf prefix: {}", update_prefix_slice);
-    println!();
-
-    let start = Instant::now();
-    let updates: Vec<(usize, String)> = zip(
-        (0..num_updates)
-            .choose_multiple(&mut rand::thread_rng(), num_updates)
-            .into_iter()
-            .sorted(),
-        (0..num_updates)
-            .map(|i| update_prefix_slice.to_string() + "/" + &i.to_string())
-            .collect::<Vec<String>>(),
-    )
-    .collect::<Vec<(usize, String)>>();
-
-    println!(
-        "Sampled {} random updates in {:?}",
-        num_updates.separate_with_commas(),
-        start.elapsed()
-    );
-    println!();
+    let updates = random_updates(num_leaves, num_updates);
 
     assert_le!(num_updates, merkle.num_leaves());
 
+
+    let (queue, pre_duration) = merkle.preprocess_leaves(updates);
     let start = Instant::now();
-    merkle.update_leaves(&updates);
-    let duration = start.elapsed();
+    merkle.update_preprocessed_leaves(queue);
+    let duration = start.elapsed() + pre_duration.unwrap_or(Duration::ZERO);
 
     println!(
-        "Updated {} leaves in {:?}",
+        "Updated {} leaves in {:?}\n\
+         * Updates per second: {}",
         num_updates.separate_with_commas(),
-        duration
-    );
-    println!(
-        "Updates per second: {}",
+        duration,
         (((num_updates as f64 / duration.as_millis() as f64) * 1000.0) as usize)
             .separate_with_commas()
     );
-    println!();
+
     println!(
-        "Total hashes computed: {}",
-        merkle.hasher.get_num_computations().separate_with_commas()
-    );
-    println!(
-        "Hasher per second: {}",
+        "Total hashes computed: {}\n\
+         * Hashes per second: {}\n",
+        merkle.hasher.get_num_computations().separate_with_commas(),
         (((merkle.hasher.get_num_computations() as f64 / duration.as_millis() as f64) * 1000.0)
             as usize)
             .separate_with_commas()

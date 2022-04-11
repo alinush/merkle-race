@@ -1,4 +1,4 @@
-use crate::merkle_abstract::AbstractMerkle;
+use crate::merkle::AbstractMerkle;
 use crate::merkle_crhf::HASH_LENGTH;
 use crate::tree_hasher::TreeHasherFunc;
 use more_asserts::assert_le;
@@ -6,7 +6,6 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
-use std::mem::size_of;
 use std::ops::{AddAssign, SubAssign};
 use tiny_keccak::{Hasher, Sha3};
 
@@ -159,17 +158,29 @@ where
     }
 }
 
-pub fn new_merklepp<IncHash, FastIncHash>(
-    k: usize,
-    h: usize,
+pub fn new_merklepp_from_height<IncHash, FastIncHash>(
+    arity: usize,
+    height: usize,
 ) -> AbstractMerkle<String, MerkleppHashValue<IncHash>, IncrementalHasher<FastIncHash>>
 where
     IncHash: Clone + Default + Serialize + AddAssign<FastIncHash>,
     for<'a> FastIncHash: Default + AddAssign + SubAssign + From<&'a [u8]>,
 {
-    let hasher = IncrementalHasher::new(k);
+    let hasher = IncrementalHasher::new(arity);
 
-    println!("Node is {} bytes", size_of::<MerkleppHashValue<IncHash>>());
+    AbstractMerkle::new(arity, height, hasher)
+}
 
-    AbstractMerkle::new(k, h, hasher)
+
+pub fn new_merklepp_from_leaves<IncHash, FastIncHash>(
+    arity: usize,
+    num_leaves: usize,
+) -> AbstractMerkle<String, MerkleppHashValue<IncHash>, IncrementalHasher<FastIncHash>>
+where
+    IncHash: Clone + Default + Serialize + AddAssign<FastIncHash>,
+    for<'a> FastIncHash: Default + AddAssign + SubAssign + From<&'a [u8]>,
+{
+    let hasher = IncrementalHasher::new(arity);
+
+    AbstractMerkle::with_num_leaves(arity, num_leaves, hasher)
 }

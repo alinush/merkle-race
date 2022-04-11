@@ -4,7 +4,7 @@ use criterion::{
 };
 use itertools::Itertools;
 use merkle_race::max_leaves;
-use merkle_race::merkle_crhf::new_merkle_sha3_256;
+use merkle_race::merkle_crhf::new_merkle_sha3_256_from_height;
 use more_asserts::assert_le;
 use rand::{distributions::Alphanumeric, Rng};
 use std::iter::zip;
@@ -19,7 +19,7 @@ pub fn merkle_sha3_benchmark<M: Measurement>(
 ) {
     let max_leaves = max_leaves(arity, height);
 
-    let mut merkle = new_merkle_sha3_256(arity, height);
+    let mut merkle = new_merkle_sha3_256_from_height(arity, height);
 
     let name_prefix = format!("arity-{}/height-{}", arity, height);
 

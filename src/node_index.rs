@@ -3,7 +3,7 @@ use std::fmt::{Debug, Formatter};
 
 // There are (n-1) / (k-1) internal nodes and n leaves.
 // We use a node index, i.e., a number from 0 to [(n - 1) / (k - 1) + n] - 1 to refer to any node (internal or leaf.)
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeIndex(pub(crate) usize);
 
 impl NodeIndex {
@@ -20,7 +20,7 @@ impl NodeIndex {
         if self.is_root() {
             0
         } else {
-            self.0 % arity
+            (self.0 - 1) % arity
         }
     }
 
@@ -59,5 +59,18 @@ impl NodeIndex {
 impl Debug for NodeIndex {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parent() {
+        let n = NodeIndex(1);
+        assert_eq!(n.parent(2), NodeIndex(0));
     }
 }
