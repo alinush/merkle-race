@@ -4,7 +4,7 @@ use merkle_race::tree_hasher::TreeHasherFunc;
 use merkle_race::{max_leaves, random_updates};
 use more_asserts::assert_le;
 use std::fmt::Debug;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use thousands::Separable;
 
 use clap::Parser;
@@ -97,11 +97,11 @@ fn bench_merkle<HashType, Hasher>(
 
     assert_le!(num_updates, merkle.num_leaves());
 
-
-    let (queue, pre_duration) = merkle.preprocess_leaves(updates);
+    // NOTE: accounting for preprocessing does reduce time from 860us to 800us in a tree of 2^28 leaves with 200K updates
+    let (queue, pre_duration) = merkle.preprocess_leaves(updates.clone());
     let start = Instant::now();
     merkle.update_preprocessed_leaves(queue);
-    let duration = start.elapsed() + pre_duration.unwrap_or(Duration::ZERO);
+    let duration = start.elapsed() + pre_duration;
 
     println!(
         "Updated {} leaves in {:?}\n\

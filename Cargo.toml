@@ -19,6 +19,9 @@ tiny-keccak = { version = "2.0.2", features = ["sha3"] }
 itertools = "0.10.3"
 thousands = "0.2.0"
 
+[profile.release]
+debug = true    # for cargo flamegraph to be able to profile in release mode
+
 [[bench]]
 name = "main"
 harness = false

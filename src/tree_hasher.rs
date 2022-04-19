@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 pub trait TreeHasherFunc<LeafDataType, HashType> {
     fn get_num_computations(&self) -> usize;
 
@@ -21,7 +19,7 @@ pub trait TreeHasherFunc<LeafDataType, HashType> {
     fn hash_nodes(
         &mut self,
         old_parent_hash: HashType,
-        old_children: Vec<HashType>,
-        new_children: &BTreeMap<usize, HashType>,
+        old_children: &mut Vec<HashType>,
+        new_children: &Vec<(usize, HashType)>,
     ) -> HashType;
 }

@@ -1,5 +1,4 @@
-use std::collections::{BTreeMap, HashSet, VecDeque};
-use std::collections::btree_map::Entry;
+use std::collections::{HashSet, VecDeque};
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::time::Duration;
@@ -264,7 +263,7 @@ impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hash
     fn pop_sibling(
         self: &mut Self,
         queue: &mut VecDeque<(NodeIndex, HashType)>,
-        siblings: &mut BTreeMap<usize, HashType>,
+        siblings: &mut Vec<(usize, HashType)>,
     ) -> NodeIndex {
         let sib = queue.pop_front().unwrap();
         let sib_idx = sib.0;
@@ -292,7 +291,7 @@ impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hash
             // println!("Dequeing new root {}", sib_idx.0);
         }
 
-        siblings.insert(sib_offset, sib.1);
+        siblings.push((sib_offset, sib.1));
 
         // NOTE: the tree will be updated with this sibling's new hash later
         sib_idx
@@ -302,7 +301,10 @@ impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hash
     pub fn preprocess_leaves(
         &mut self,
         updates: Vec<(usize, LeafDataType)>,
-    ) -> (VecDeque<(NodeIndex, HashType)>, Option<Duration>) {
+    ) -> (VecDeque<(NodeIndex, HashType)>, Duration) {
+        // clear the map of nodes we hashed
+        self._hashed_nodes.clear();
+
         // Assert that leaf updates are sorted by index
         // NOTE: debug_assert_* calls are disabled for benchmarks!
         debug_assert!((0..updates.len() - 1).all(|i| updates[i].0 <= updates[i + 1].0));
@@ -341,12 +343,12 @@ impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hash
             upd_queue.append(&mut self._queuefy(second_to_last));
             // println!("Done pre-processing last level of leaves")
 
-            (upd_queue, Some(duration))
+            (upd_queue, duration)
         } else {
             upd_queue.append(&mut self._queuefy(updates.as_slice()));
             // println!("Does NOT have two levels of leaves");
 
-            (upd_queue, None)
+            (upd_queue, Duration::ZERO)
         }
 
         // TODO: Stream updates to save memory on updates vec?
@@ -363,9 +365,9 @@ impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hash
                 let child_offset: usize = self.child_offset(&leaf_idx);
 
                 // NOTE: Uncomment for debugging
-                //println!("Hashing and queueing leaf idx {} (leaf #{})", leaf_idx.0, *leaf_pos);
                 debug_assert!(self.is_leaf(&leaf_idx));
-                debug_assert!(self._hashed_nodes.insert(leaf_idx) == true);
+                //println!("Hashing and queueing leaf idx {} (leaf #{})", leaf_idx.0, *leaf_pos);
+                debug_assert!(self._hashed_nodes.insert(leaf_idx));
 
                 (
                     leaf_idx,
@@ -383,6 +385,7 @@ impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hash
     }
 
     pub fn update_preprocessed_leaves(&mut self, mut curr_updates: VecDeque<(NodeIndex, HashType)>) {
+
         self._process_update_queue(&mut curr_updates, None);
     }
 
@@ -391,9 +394,12 @@ impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hash
         dequeue: &mut VecDeque<(NodeIndex, HashType)>,
         mut enqueue_opt: Option<&mut VecDeque<(NodeIndex, HashType)>>,
     ) {
+        let mut new_siblings = Vec::with_capacity(self.arity);
+        let mut old_siblings: Vec<HashType> = Vec::with_capacity(self.arity);
+
         while !dequeue.is_empty() {
-            let mut new_siblings = BTreeMap::new();
-            let mut old_siblings: Vec<HashType> = Vec::with_capacity(self.arity);
+            new_siblings.clear();
+            old_siblings.clear();
 
             // pop the first sibling off the queue
             let first_sib_idx = self.pop_sibling(dequeue, &mut new_siblings);
@@ -442,18 +448,24 @@ impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hash
                     } else {
                         // NOTE: Uncomment for debugging
                         // println!("Parent {} has no child #{}, breaking...", parent_idx.0, i);
+                        // println!("Breaking at missing child {}. len(old_siblings) = {}", child_idx.0, old_siblings.len());
 
-                        // if the parent has no child i, it has no children > i
+                        // If the parent has no child i, it has no children > i
+                        //
+                        // NOTE(Alin): It's possible for a parent on the second-to-last level, to
+                        // have less than 'arity' leaves. In that case, old_siblings will have length
+                        // smaller than 'arity' but so will 'new_siblings' and we won't run into
+                        // problems inside 'TreeHasherFunc::hash_nodes'
                         break;
                     }
                 }
 
                 // first, compute the updated parent hash and schedule it to be processed later
                 //println!("Hashing and queueing parent {}", parent_idx.0);
-                debug_assert!(self._hashed_nodes.insert(parent_idx) == true);
+                debug_assert!(self._hashed_nodes.insert(parent_idx));
                 let hash = self.hasher.hash_nodes(
                     self.get_node_hash(&parent_idx).unwrap(),
-                    old_siblings,
+                    &mut old_siblings,
                     &new_siblings,
                 );
 
@@ -478,21 +490,17 @@ impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hash
                 }
 
                 // second, update tree with new sibling hashes
-                for (idx, hash) in new_siblings {
-                    let child_idx = self.child_node(&parent_idx, idx);
-                    self.set_node_hash(&child_idx, hash);
+                for (idx, hash) in &new_siblings {
+                    // TODO(Perf): Recomputing child node idx
+                    let child_idx = self.child_node(&parent_idx, *idx);
+                    self.set_node_hash(&child_idx, hash.clone());
                 }
 
                 // end of !first_sib_idx.is_root()
             } else {
                 debug_assert_eq!(new_siblings.len(), 1);
 
-                match new_siblings.entry(0) {
-                    Entry::Vacant(_) => panic!("Expected root node to be in the new_siblings map"),
-                    Entry::Occupied(hash) => {
-                        self.set_node_hash(&NodeIndex::root_node(), hash.remove())
-                    }
-                }
+                self.set_node_hash(&NodeIndex::root_node(), new_siblings.pop().unwrap().1)
             }
         }
     }

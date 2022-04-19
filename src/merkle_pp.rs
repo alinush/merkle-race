@@ -3,7 +3,6 @@ use crate::merkle_crhf::HASH_LENGTH;
 use crate::tree_hasher::TreeHasherFunc;
 use more_asserts::assert_le;
 use serde::Serialize;
-use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::ops::{AddAssign, SubAssign};
@@ -103,8 +102,8 @@ where
     fn hash_nodes(
         &mut self,
         old_parent_hash: MerkleppHashValue<IncHash>,
-        mut old_children: Vec<MerkleppHashValue<IncHash>>,
-        new_children: &BTreeMap<usize, MerkleppHashValue<IncHash>>,
+        old_children: &mut Vec<MerkleppHashValue<IncHash>>,
+        new_children: &Vec<(usize, MerkleppHashValue<IncHash>)>,
     ) -> MerkleppHashValue<IncHash> {
         // count the number of children whose hashes have changed
         let num_changes = new_children.len();
@@ -120,7 +119,7 @@ where
 
             // replace old hashes with new ones
             for (pos, hash) in new_children {
-                old_children[*pos] = hash.clone();
+                old_children[*pos] = hash.clone(); // TODO(Perf): avoid clone?
             }
 
             // recompute parent's incremental hash from scratch

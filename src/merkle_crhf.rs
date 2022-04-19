@@ -1,7 +1,6 @@
 use crate::merkle::AbstractMerkle;
 use crate::tree_hasher::TreeHasherFunc;
 use more_asserts::assert_le;
-use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use tiny_keccak::{Hasher, Sha3};
 
@@ -58,8 +57,8 @@ impl TreeHasherFunc<String, MerkleHashValue> for HasherSha3 {
     fn hash_nodes(
         &mut self,
         _old_parent_hash: MerkleHashValue,
-        mut old_children: Vec<MerkleHashValue>,
-        new_children: &BTreeMap<usize, MerkleHashValue>,
+        old_children: &mut Vec<MerkleHashValue>,
+        new_children: &Vec<(usize, MerkleHashValue)>,
     ) -> MerkleHashValue {
         self.num_hashes += 1;
 
@@ -70,7 +69,7 @@ impl TreeHasherFunc<String, MerkleHashValue> for HasherSha3 {
 
         // replace old hashes with new ones
         for (pos, hash) in new_children {
-            old_children[*pos] = hash.clone();
+            old_children[*pos] = hash.clone(); // TODO(Perf): avoid clone?
         }
 
         for h in old_children {
@@ -139,7 +138,7 @@ mod tests {
     }
 
     #[test]
-    fn bvt_arity_2_perfect() {
+    fn bvt_perfect() {
         for arity in [ 2, 4, 8, 16 ] {
             for height in [1, 2, 3, 4] {
                 let num_leaves = max_leaves(arity, height);
@@ -151,7 +150,7 @@ mod tests {
     }
 
     #[test]
-    fn bvt_arity_2_imperfect() {
+    fn bvt_imperfect() {
         // e.g., tree with 3 leaves
         //        *
         //      /   \
@@ -189,6 +188,20 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn bvt_arity_16_imperfect() {
+        // TODO: Should have these tests for any Merkle tree in tests/
+        let arity = 16;
+        for num_leaves in 16..=128 {
+            println!("Testing arity {} with {} leaves", arity, num_leaves);
+            let mut merkle = new_merkle_sha3_256_from_leaves(arity, num_leaves);
+
+            //assert!(merkle._hashed_nodes.is_empty());
+            test_with_random_updates(num_leaves, &mut merkle);
+        }
+    }
+
 
     #[test]
     fn bvt_arity_16_examples() {
