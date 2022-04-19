@@ -98,7 +98,7 @@ fn bench_merkle<HashType, Hasher>(
     assert_le!(num_updates, merkle.num_leaves());
 
     // NOTE: accounting for preprocessing does reduce time from 860us to 800us in a tree of 2^28 leaves with 200K updates
-    let (queue, pre_duration) = merkle.preprocess_leaves(updates.clone());
+    let (queue, pre_duration) = merkle.preprocess_leaves(updates);
     let start = Instant::now();
     merkle.update_preprocessed_leaves(queue);
     let duration = start.elapsed() + pre_duration;
