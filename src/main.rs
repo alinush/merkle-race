@@ -116,6 +116,7 @@ fn bench_merkle<HashType, Hasher>(
     println!();
 
     assert_le!(num_updates, merkle.num_leaves());
+    assert_eq!(num_updates, updates.len());
 
     let start = Instant::now();
     merkle.update_leaves(&updates);

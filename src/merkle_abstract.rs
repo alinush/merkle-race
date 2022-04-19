@@ -3,7 +3,7 @@ use crate::node_index::NodeIndex;
 use crate::tree_hasher::TreeHasherFunc;
 use more_asserts::assert_le;
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::marker::PhantomData;
 
 // An abstract, "perfect" Merkle tree of arity k and height h, where "perfect" means the tree has
@@ -48,6 +48,8 @@ pub struct AbstractMerkle<LeafDataType, HashType, Hasher> {
 
     // Rust is weird.
     phantom: PhantomData<LeafDataType>,
+
+    _hashed_nodes: HashSet<NodeIndex>,
 }
 
 impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hasher>
@@ -72,6 +74,7 @@ where
             nodes: vec![HashType::default(); total_nodes],
             hasher,
             phantom: Default::default(),
+            _hashed_nodes: HashSet::new(),
         }
     }
 
@@ -141,6 +144,7 @@ where
                 let leaf_idx = self.get_leaf_idx(leaf_pos);
                 let child_offset: usize = self.child_offset(&leaf_idx);
 
+                debug_assert_eq!(self._hashed_nodes.insert(leaf_idx), true);
                 (
                     leaf_idx,
                     self.hasher.hash_leaf_data(child_offset, leaf_data.clone()),
@@ -200,6 +204,7 @@ where
                 }
 
                 // first, compute the updated parent hash and schedule it to be processed later
+                debug_assert_eq!(self._hashed_nodes.insert(parent_idx), true);
                 curr_updates.push_back((
                     parent_idx,
                     self.hasher.hash_nodes(

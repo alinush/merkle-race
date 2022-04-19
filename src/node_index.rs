@@ -3,7 +3,7 @@ use std::fmt::{Debug, Formatter};
 
 // There are (n-1) / (k-1) internal nodes and n leaves.
 // We use a node index, i.e., a number from 0 to [(n - 1) / (k - 1) + n] - 1 to refer to any node (internal or leaf.)
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct NodeIndex(pub(crate) usize);
 
 impl NodeIndex {
