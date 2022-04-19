@@ -98,7 +98,7 @@ fn bench_merkle<HashType, Hasher>(
 
     let start = Instant::now();
     let updates: Vec<(usize, String)> = zip(
-        (0..num_updates)
+        (0..merkle.num_leaves())
             .choose_multiple(&mut rand::thread_rng(), num_updates)
             .into_iter()
             .sorted(),
@@ -113,6 +113,7 @@ fn bench_merkle<HashType, Hasher>(
         num_updates.separate_with_commas(),
         start.elapsed()
     );
+    //dbg!(updates.iter().map(|(pos, _)| *pos).collect::<Vec<usize>>());
     println!();
 
     assert_le!(num_updates, merkle.num_leaves());
