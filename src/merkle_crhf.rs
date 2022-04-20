@@ -8,6 +8,7 @@ use more_asserts::assert_le;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use tiny_keccak::{Hasher, Sha3};
+use sha3::Sha3_256;
 
 pub const HASH_LENGTH: usize = 32;
 
@@ -30,11 +31,11 @@ pub trait HashFuncTrait {
     fn finalize(self, buf: &mut [u8; HASH_LENGTH]);
 }
 
-pub struct Sha3HashFunc(Sha3);
+pub struct TinySha3HashFunc(Sha3);
 
-impl HashFuncTrait for Sha3HashFunc {
+impl HashFuncTrait for TinySha3HashFunc {
     fn new() -> Self {
-        Sha3HashFunc(Sha3::v256())
+        TinySha3HashFunc(Sha3::v256())
     }
 
     fn update(&mut self, buf: &[u8]) {
@@ -43,6 +44,22 @@ impl HashFuncTrait for Sha3HashFunc {
 
     fn finalize(self, buf: &mut [u8; HASH_LENGTH]) {
         self.0.finalize(buf);
+    }
+}
+
+pub struct Sha3HashFunc(Sha3_256);
+
+impl HashFuncTrait for Sha3HashFunc {
+    fn new() -> Self {
+        Sha3HashFunc(Sha3_256::new())
+    }
+
+    fn update(&mut self, buf: &[u8]) {
+        self.0.update(buf);
+    }
+
+    fn finalize(self, buf: &mut [u8; HASH_LENGTH]) {
+        self.0.finalize_into(GenericArray::from_mut_slice(buf));
     }
 }
 
@@ -181,7 +198,7 @@ mod tests {
 
     #[test]
     fn bvt_arity_2_examples() {
-        let mut merkle = new_merkle_crhf_from_leaves::<Sha3HashFunc>(2, 3);
+        let mut merkle = new_merkle_crhf_from_leaves::<TinySha3HashFunc>(2, 3);
         let updates = vec![
             (0usize, "lol".to_owned()),
             (1usize, "ha".to_owned()),
@@ -189,7 +206,7 @@ mod tests {
         ];
         merkle.update_leaves(updates);
 
-        let mut merkle = new_merkle_crhf_from_leaves::<Sha3HashFunc>(2, 10);
+        let mut merkle = new_merkle_crhf_from_leaves::<TinySha3HashFunc>(2, 10);
         let updates = vec![
             (0usize, "lol".to_owned()),
             (1usize, "ha".to_owned()),
@@ -221,7 +238,7 @@ mod tests {
         for arity in [2, 4, 8, 16] {
             for height in [1, 2, 3, 4] {
                 let num_leaves = max_leaves(arity, height);
-                let mut merkle = new_merkle_crhf_from_leaves::<Sha3HashFunc>(arity, num_leaves);
+                let mut merkle = new_merkle_crhf_from_leaves::<TinySha3HashFunc>(arity, num_leaves);
 
                 test_with_random_updates(num_leaves, &mut merkle)
             }
@@ -262,7 +279,7 @@ mod tests {
             //let arity = 2;
             for num_leaves in 2..=256 {
                 println!("Testing arity {} with {} leaves", arity, num_leaves);
-                let mut merkle = new_merkle_crhf_from_leaves::<Sha3HashFunc>(arity, num_leaves);
+                let mut merkle = new_merkle_crhf_from_leaves::<TinySha3HashFunc>(arity, num_leaves);
 
                 test_with_random_updates(num_leaves, &mut merkle);
             }
@@ -275,7 +292,7 @@ mod tests {
         let arity = 16;
         for num_leaves in 16..=128 {
             println!("Testing arity {} with {} leaves", arity, num_leaves);
-            let mut merkle = new_merkle_crhf_from_leaves::<Sha3HashFunc>(arity, num_leaves);
+            let mut merkle = new_merkle_crhf_from_leaves::<TinySha3HashFunc>(arity, num_leaves);
 
             //assert!(merkle._hashed_nodes.is_empty());
             test_with_random_updates(num_leaves, &mut merkle);
@@ -284,7 +301,7 @@ mod tests {
 
     #[test]
     fn bvt_arity_16_examples() {
-        let mut merkle = new_merkle_crhf_from_height::<Sha3HashFunc>(16, 3);
+        let mut merkle = new_merkle_crhf_from_height::<TinySha3HashFunc>(16, 3);
         let updates = vec![
             (0usize, "lol".to_owned()),
             (1usize, "ha".to_owned()),
@@ -297,7 +314,7 @@ mod tests {
         ];
         merkle.update_leaves(updates);
 
-        let mut merkle = new_merkle_crhf_from_leaves::<Sha3HashFunc>(16, 600);
+        let mut merkle = new_merkle_crhf_from_leaves::<TinySha3HashFunc>(16, 600);
         let updates = vec![
             (0usize, "lol".to_owned()),
             (1usize, "ha".to_owned()),

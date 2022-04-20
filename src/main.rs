@@ -1,5 +1,5 @@
 use merkle_race::merkle::AbstractMerkle;
-use merkle_race::merkle_crhf::{new_merkle_crhf_from_leaves, Blake2sHashFunc, Sha3HashFunc, Blake2bHashFunc};
+use merkle_race::merkle_crhf::{new_merkle_crhf_from_leaves, Blake2sHashFunc, TinySha3HashFunc, Blake2bHashFunc, Sha3HashFunc};
 use merkle_race::tree_hasher::TreeHasherFunc;
 use merkle_race::{max_leaves, random_updates};
 use more_asserts::assert_le;
@@ -62,6 +62,11 @@ fn main() {
     println!();
 
     match args._type.as_str() {
+        "merkle_tiny_sha3" => {
+            let mut merkle = new_merkle_crhf_from_leaves::<TinySha3HashFunc>(args.arity, num_leaves);
+
+            bench_merkle(&mut merkle, num_leaves, num_updates);
+        }
         "merkle_sha3" => {
             let mut merkle = new_merkle_crhf_from_leaves::<Sha3HashFunc>(args.arity, num_leaves);
 

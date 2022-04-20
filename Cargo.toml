@@ -17,6 +17,7 @@ more-asserts = "0.2.2"
 rand = "0.8.5"
 rust-incrhash = { path = "../rust-incrhash" }
 serde = { version = "1", features = ["derive"] }
+sha3 = "0.10.1"
 tiny-keccak = { version = "2.0.2", features = ["sha3"] }
 itertools = "0.10.3"
 thousands = "0.2.0"
