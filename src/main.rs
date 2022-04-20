@@ -1,5 +1,5 @@
 use merkle_race::merkle::AbstractMerkle;
-use merkle_race::merkle_crhf::{new_merkle_sha3_256_from_leaves};
+use merkle_race::merkle_crhf::{new_merkle_crhf_from_leaves, Blake2sHashFunc, Sha3HashFunc};
 use merkle_race::tree_hasher::TreeHasherFunc;
 use merkle_race::{max_leaves, random_updates};
 use more_asserts::assert_le;
@@ -8,7 +8,7 @@ use std::time::Instant;
 use thousands::Separable;
 
 use clap::Parser;
-use merkle_race::merkle_pp::{new_merklepp_from_leaves};
+use merkle_race::merkle_pp::new_merklepp_from_leaves;
 use rust_incrhash::compressed_ristretto::CompRistBlakeIncHash;
 use rust_incrhash::ristretto::RistBlakeIncHash;
 
@@ -17,7 +17,7 @@ use rust_incrhash::ristretto::RistBlakeIncHash;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Can be either: merkle_sha3, merkle++, merkle++naive
+    /// Can be either: merkle_sha3, merkle_blake2s, merkle++, merkle++naive
     #[clap(short, long)]
     _type: String, // TODO: list options
 
@@ -63,19 +63,26 @@ fn main() {
 
     match args._type.as_str() {
         "merkle_sha3" => {
-            let mut merkle = new_merkle_sha3_256_from_leaves(args.arity, num_leaves);
+            let mut merkle = new_merkle_crhf_from_leaves::<Sha3HashFunc>(args.arity, num_leaves);
+
+            bench_merkle(&mut merkle, num_leaves, num_updates);
+        }
+        "merkle_blake2s" => {
+            let mut merkle = new_merkle_crhf_from_leaves::<Blake2sHashFunc>(args.arity, num_leaves);
 
             bench_merkle(&mut merkle, num_leaves, num_updates);
         }
         "merkle++" => {
-            let mut merklepp =
-                new_merklepp_from_leaves::<CompRistBlakeIncHash, RistBlakeIncHash>(args.arity, num_leaves);
+            let mut merklepp = new_merklepp_from_leaves::<CompRistBlakeIncHash, RistBlakeIncHash>(
+                args.arity, num_leaves,
+            );
 
             bench_merkle(&mut merklepp, num_leaves, num_updates);
         }
         "merkle++naive" => {
-            let mut merklepp =
-                new_merklepp_from_leaves::<CompRistBlakeIncHash, RistBlakeIncHash>(args.arity, num_leaves);
+            let mut merklepp = new_merklepp_from_leaves::<RistBlakeIncHash, RistBlakeIncHash>(
+                args.arity, num_leaves,
+            );
 
             bench_merkle(&mut merklepp, num_leaves, num_updates);
         }
