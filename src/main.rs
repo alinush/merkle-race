@@ -1,5 +1,5 @@
 use merkle_race::merkle::AbstractMerkle;
-use merkle_race::merkle_crhf::{new_merkle_crhf_from_leaves, Blake2sHashFunc, Sha3HashFunc};
+use merkle_race::merkle_crhf::{new_merkle_crhf_from_leaves, Blake2sHashFunc, Sha3HashFunc, Blake2bHashFunc};
 use merkle_race::tree_hasher::TreeHasherFunc;
 use merkle_race::{max_leaves, random_updates};
 use more_asserts::assert_le;
@@ -17,7 +17,7 @@ use rust_incrhash::ristretto::RistBlakeIncHash;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Can be either: merkle_sha3, merkle_blake2s, merkle++, merkle++naive
+    /// Can be either: merkle_sha3, merkle_blake2s, merkle_blake2b, merkle++, merkle++naive
     #[clap(short, long)]
     _type: String, // TODO: list options
 
@@ -69,6 +69,11 @@ fn main() {
         }
         "merkle_blake2s" => {
             let mut merkle = new_merkle_crhf_from_leaves::<Blake2sHashFunc>(args.arity, num_leaves);
+
+            bench_merkle(&mut merkle, num_leaves, num_updates);
+        }
+        "merkle_blake2b" => {
+            let mut merkle = new_merkle_crhf_from_leaves::<Blake2bHashFunc>(args.arity, num_leaves);
 
             bench_merkle(&mut merkle, num_leaves, num_updates);
         }

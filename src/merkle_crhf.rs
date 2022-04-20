@@ -1,7 +1,8 @@
 use crate::merkle::AbstractMerkle;
 use crate::tree_hasher::TreeHasherFunc;
 use blake2::digest::generic_array;
-use blake2::{Blake2s256, Digest};
+use blake2::{Blake2b, Blake2s256, Digest};
+use digest::consts::U32;
 use generic_array::GenericArray;
 use more_asserts::assert_le;
 use std::fmt::{Debug, Formatter};
@@ -45,11 +46,29 @@ impl HashFuncTrait for Sha3HashFunc {
     }
 }
 
+// IIRC, faster for 32-bit platforms
 pub struct Blake2sHashFunc(Blake2s256);
 
 impl HashFuncTrait for Blake2sHashFunc {
     fn new() -> Self {
         Blake2sHashFunc(Blake2s256::new())
+    }
+
+    fn update(&mut self, buf: &[u8]) {
+        self.0.update(buf);
+    }
+
+    fn finalize(self, buf: &mut [u8; HASH_LENGTH]) {
+        self.0.finalize_into(GenericArray::from_mut_slice(buf));
+    }
+}
+
+// IIRC, faster for 64-bit platforms
+pub struct Blake2bHashFunc(Blake2b<U32>);
+
+impl HashFuncTrait for Blake2bHashFunc {
+    fn new() -> Self {
+        Blake2bHashFunc(Blake2b::<U32>::new())
     }
 
     fn update(&mut self, buf: &[u8]) {

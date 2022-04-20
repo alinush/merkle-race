@@ -21,7 +21,7 @@ arity="
 if [ $# -lt 1 ]; then
     echo "Usage: $0 <merkle-type>"
     echo
-    echo "<merkle-type> can be either 'merkle_sha3', 'merkle_blake2s' or 'merkle++'"
+    echo "<merkle-type> can be either 'merkle_sha3', 'merkle_blake2s', 'merkle_blake2b' or 'merkle++'"
     exit 1
 fi
 
