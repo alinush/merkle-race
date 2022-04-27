@@ -1,5 +1,5 @@
-use crate::merkle::AbstractMerkle;
-use crate::tree_hasher::TreeHasherFunc;
+use crate::merkle_abstract::AbstractMerkle;
+use crate::hashing_traits::{HASH_LENGTH, HashFuncTrait, TreeHasherFunc};
 use blake2::digest::generic_array;
 use blake2::{Blake2b, Blake2s256, Digest};
 use digest::consts::U32;
@@ -10,8 +10,6 @@ use std::marker::PhantomData;
 use tiny_keccak::{Hasher, Sha3};
 use sha3::Sha3_256;
 
-pub const HASH_LENGTH: usize = 32;
-
 #[derive(Default, Clone)]
 pub struct MerkleHashValue {
     hash: [u8; HASH_LENGTH],
@@ -21,14 +19,6 @@ impl Debug for MerkleHashValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", hex::encode(self.hash))
     }
-}
-
-pub trait HashFuncTrait {
-    fn new() -> Self;
-
-    fn update(&mut self, buf: &[u8]);
-
-    fn finalize(self, buf: &mut [u8; HASH_LENGTH]);
 }
 
 pub struct TinySha3HashFunc(Sha3);
@@ -121,9 +111,9 @@ where
         self.num_hashes
     }
 
-    fn is_incremental(&self) -> bool {
-        false
-    }
+    // fn is_incremental(&self) -> bool {
+    //     false
+    // }
 
     fn hash_leaf_data(&mut self, _offset: usize, data: String) -> MerkleHashValue {
         self.num_hashes += 1;

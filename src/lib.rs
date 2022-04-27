@@ -10,11 +10,17 @@ use std::vec::IntoIter;
 use thousands::Separable;
 
 //#![feature(is_sorted)]
-pub mod merkle;
+
+#[macro_use]
+pub(crate) mod macros;
+
+pub mod merkle_abstract;
 pub mod merkle_crhf;
 pub mod merkle_pp;
 pub mod node_index;
-pub mod tree_hasher;
+pub mod hashing_traits;
+pub mod verkle;
+pub mod verkle_ristretto;
 
 pub fn max_leaves(arity: usize, height: usize) -> usize {
     arity.pow(height as u32)

@@ -11,6 +11,8 @@ bincode = "1"
 blake2 = "0.10.4"
 clap = { version = "3.1.8", features = ["derive"] }
 criterion = "0.3.5"
+#curve25519-dalek =  { version = "4.0.0-pre.2", features = ["serde"] }
+curve25519-dalek = { git = "https://github.com/alinush/curve25519-dalek", tag = "4.0.0-pre.2-alin", features = ["serde"] }
 digest = "0.10.3"
 hex = "0.4.3"
 more-asserts = "0.2.2"
@@ -26,5 +28,9 @@ thousands = "0.2.0"
 debug = true    # for cargo flamegraph to be able to profile in release mode
 
 [[bench]]
-name = "main"
+name = "multiexp"
+harness = false
+
+[[bench]]
+name = "verkle"
 harness = false

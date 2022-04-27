@@ -1,12 +1,13 @@
-use crate::merkle::AbstractMerkle;
-use crate::merkle_crhf::HASH_LENGTH;
-use crate::tree_hasher::TreeHasherFunc;
+use crate::merkle_abstract::AbstractMerkle;
+use crate::hashing_traits::{HASH_LENGTH, TreeHasherFunc};
 use more_asserts::assert_le;
 use serde::Serialize;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::ops::{AddAssign, SubAssign};
-use tiny_keccak::{Hasher, Sha3};
+use blake2::{Digest, Blake2b};
+use digest::consts::U32;
+use digest::generic_array::GenericArray;
 
 #[derive(Clone)]
 pub enum MerkleppHashValue<IncHash> {
@@ -46,7 +47,7 @@ impl<FastIncHash> IncrementalHasher<FastIncHash> {
 }
 
 // NOTE: We store children hashes in memory as IncrHash<CompressedRistretto, _>'s, but we hash them to
-// IncrHash<RistrettoPoints, _> since they are faster to add. This is why there are two paramters here
+// IncrHash<RistrettoPoints, _> since they are faster to add. This is why there are two parameters here
 fn hash_child<ChildIncHash, FastIncHash>(
     i: usize,
     child_hash: &MerkleppHashValue<ChildIncHash>,
@@ -84,17 +85,18 @@ where
         self.num_hashes
     }
 
-    fn is_incremental(&self) -> bool {
-        true
-    }
+    // fn is_incremental(&self) -> bool {
+    //     true
+    // }
 
     fn hash_leaf_data(&mut self, _offset: usize, data: String) -> MerkleppHashValue<IncHash> {
-        let mut hasher = Sha3::v256();
+        // TODO: allow choice here via template parameter
+        let mut hasher = Blake2b::<U32>::new();
 
         let mut hash = [0u8; HASH_LENGTH];
         hasher.update("leaf:".as_bytes());
         hasher.update(data.as_bytes());
-        hasher.finalize(&mut hash);
+        hasher.finalize_into(GenericArray::from_mut_slice(&mut hash));
 
         MerkleppHashValue::<IncHash>::Leaf(hash)
     }

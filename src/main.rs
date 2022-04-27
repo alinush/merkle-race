@@ -1,6 +1,6 @@
-use merkle_race::merkle::AbstractMerkle;
+use merkle_race::merkle_abstract::AbstractMerkle;
 use merkle_race::merkle_crhf::{new_merkle_crhf_from_leaves, Blake2sHashFunc, TinySha3HashFunc, Blake2bHashFunc, Sha3HashFunc};
-use merkle_race::tree_hasher::TreeHasherFunc;
+use merkle_race::hashing_traits::TreeHasherFunc;
 use merkle_race::{max_leaves, random_updates};
 use more_asserts::assert_le;
 use std::fmt::Debug;
@@ -8,16 +8,21 @@ use std::time::Instant;
 use thousands::Separable;
 
 use clap::Parser;
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
+use curve25519_dalek::scalar::Scalar;
+use rand::thread_rng;
 use merkle_race::merkle_pp::new_merklepp_from_leaves;
 use rust_incrhash::compressed_ristretto::CompRistBlakeIncHash;
 use rust_incrhash::ristretto::RistBlakeIncHash;
+use merkle_race::verkle::new_verkle_from_leaves;
+use merkle_race::verkle_ristretto::{CompressedRistretto, RistrettoBasepointTable, RistrettoPoint, VartimeRistrettoSubsetPrecomputation};
 
 /// Program to benchmark three types of Merkle trees: traditional CRHF-based Merkle,
 /// incrementally-hashed Merkle (or Merkle++), and VC-based Merkle (or Verkle)
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Can be either: merkle_sha3, merkle_blake2s, merkle_blake2b, merkle++, merkle++naive
+    /// Can be either: merkle_sha3, merkle_blake2s, merkle_blake2b, merkle++, merkle++naive, or verkle
     #[clap(short, long)]
     _type: String, // TODO: list options
 
@@ -95,6 +100,17 @@ fn main() {
             );
 
             bench_merkle(&mut merklepp, num_leaves, num_updates);
+        }
+        "verkle" => {
+            let mut rng = thread_rng();
+            let bases = (0..args.arity).map(|_|
+                RistrettoPoint(&Scalar::random(&mut rng) * &RISTRETTO_BASEPOINT_TABLE)).collect::<Vec<RistrettoPoint>>();
+
+            let mut verkle = new_verkle_from_leaves::<RistrettoPoint, CompressedRistretto, VartimeRistrettoSubsetPrecomputation, RistrettoBasepointTable>(
+                args.arity, num_leaves, bases,
+            );
+
+            bench_merkle(&mut verkle, num_leaves, num_updates);
         }
         _ => {
             println!("Unknown type of Merkle tree provided: {}", args._type)

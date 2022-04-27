@@ -7,7 +7,7 @@ use more_asserts::{assert_le, debug_assert_le};
 
 use crate::max_leaves;
 use crate::node_index::NodeIndex;
-use crate::tree_hasher::TreeHasherFunc;
+use crate::hashing_traits::TreeHasherFunc;
 
 // An abstract, "perfect" Merkle tree of arity k and height h, where "perfect" means the tree has
 // *exactly* k^h leaves

@@ -1,8 +1,18 @@
+pub const HASH_LENGTH: usize = 32;
+
+pub trait HashFuncTrait {
+    fn new() -> Self;
+
+    fn update(&mut self, buf: &[u8]);
+
+    fn finalize(self, buf: &mut [u8; HASH_LENGTH]);
+}
+
 pub trait TreeHasherFunc<LeafDataType, HashType> {
     fn get_num_computations(&self) -> usize;
 
     // returns true if hash_nodes() does not need *all* the old children hashes to compute the parent's new hash
-    fn is_incremental(&self) -> bool;
+    // fn is_incremental(&self) -> bool;
 
     // We need this in Merkle++/Verkle because there we will hash leaf data using slightly more efficient
     // hash functions.
