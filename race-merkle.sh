@@ -45,7 +45,8 @@ for nn in $num_leaves; do
 
     for a in $arity; do
         if echo $a | grep "^#.*" &>/dev/null; then
-            echo "Skipping benchmark for $n leaves arity-$a..."
+            aa=`echo "$a" | tr -d '#'`
+            echo "Skipping benchmark for $n leaves arity-$aa..."
             continue
         fi
 
@@ -54,21 +55,27 @@ for nn in $num_leaves; do
         # remove commas from 'n'
         n=`echo "$nn" | tr -d ','`
 
+        #cargo run --release -- -t=$type -a $a -l $n -u $u 2>&1
         output=`cargo run --release -- -t=$type -a $a -l $n -u $u 2>&1`
+        #echo "Return: $?"
 
-        if [ $? -eq 1 ]; then
+        if [ $? -ne 0 ]; then
+            echo
             echo "ERROR: cargo run failed to run benchmark"
             echo "---------------------"
             echo "$output"
             echo "---------------------"
+            echo
         else
             upds_per_sec=`echo "$output" | grep -e 'Updates per second' | tr -d ',' | tr -dc '0-9'`
             hashes_per_sec=`echo "$output" | grep -e 'Hashes per second' | tr -d ',' | tr -dc '0-9'`
             num_hashes=`echo "$output" | grep -e 'hashes computed' | tr -d ',' | tr -dc '0-9'` 
+            exp_time=`echo "$output" | grep -e 'Average time per exponentiation'` 
 
             echo "$upds_per_sec updates / sec"
             echo "$hashes_per_sec hashes / sec"
             echo "$num_hashes total hashes"
+            [ -n "$exp_time" ] && echo "$exp_time"
             echo
             echo "$type,$a,$n,$u,$upds_per_sec,$hashes_per_sec,$num_hashes" >>$output_file
         fi

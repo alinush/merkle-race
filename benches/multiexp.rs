@@ -2,17 +2,19 @@ use std::iter::zip;
 use criterion::{criterion_group, criterion_main, measurement::Measurement, BenchmarkGroup, BenchmarkId, Criterion, Throughput, BatchSize};
 use rand::thread_rng;
 use curve25519_dalek::constants;
-use curve25519_dalek::ristretto::{RistrettoPoint, VartimeRistrettoPrecomputation, VartimeRistrettoSubsetPrecomputation};
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
+use curve25519_dalek::ristretto::{RistrettoPoint as DalekRistrPoint, VartimeRistrettoPrecomputation, VartimeRistrettoSubsetPrecomputation};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::{VartimePrecomputedMultiscalarMul, VartimePrecomputedSubsetMultiscalarMul};
 use rand::prelude::IteratorRandom;
+use merkle_race::verkle_ristretto::{CreateFromPoint, RistrettoBasepointTable, RistrettoPoint};
 
 fn construct_scalars(n: usize) -> Vec<Scalar> {
     let mut rng = thread_rng();
     (0..n).map(|_| Scalar::random(&mut rng)).collect()
 }
 
-fn construct_points(n: usize) -> Vec<RistrettoPoint> {
+fn construct_points(n: usize) -> Vec<DalekRistrPoint> {
     let mut rng = thread_rng();
     (0..n)
         .map(|_| &Scalar::random(&mut rng) * &constants::RISTRETTO_BASEPOINT_TABLE)
@@ -42,7 +44,7 @@ pub fn somebases_multiexp_benchmark<M: Measurement>(
                     scalars
                 },
                 |scalars| {
-                    let h: RistrettoPoint = precomp.vartime_subset_multiscalar_mul(scalars);
+                    let h: DalekRistrPoint = precomp.vartime_subset_multiscalar_mul(scalars);
                     drop(h)
                 },
                 BatchSize::SmallInput,
@@ -65,7 +67,7 @@ pub fn allbases_multiexp_benchmark<M: Measurement>(
             b.iter_batched(
                 || construct_scalars(size),
                 |scalars| {
-                    let h: RistrettoPoint = precomp.vartime_multiscalar_mul(scalars);
+                    let h: DalekRistrPoint = precomp.vartime_multiscalar_mul(scalars);
                     drop(h)
                 },
                 BatchSize::SmallInput,
@@ -98,9 +100,38 @@ pub fn somebases_multiexp_group(c: &mut Criterion) {
     group.finish();
 }
 
+pub fn single_exp_group(c: &mut Criterion) {
+    let mut group = c.benchmark_group("single-exp");
+
+    single_exp_benches(&mut group);
+
+    group.finish();
+}
+
+fn single_exp_benches<M: Measurement>(g: &mut BenchmarkGroup<M>) {
+    let p = &constants::ED25519_BASEPOINT_TABLE;
+    let mut rng = thread_rng();
+
+    g.throughput(Throughput::Elements(1));
+    g.bench_function("Ed25519/Constant-time fixed-base scalar mul", move |b| {
+        let s = Scalar::random(&mut rng);
+        b.iter(|| p * &s)
+    });
+
+    g.throughput(Throughput::Elements(1));
+    g.bench_function("RistrettoPointWrapped/Constant-time fixed-base scalar mul", move |b| {
+        b.iter_batched(
+            || (Scalar::random(&mut thread_rng()),
+                RistrettoBasepointTable::create(&RistrettoPoint(RISTRETTO_BASEPOINT_POINT))),
+            |(p, s)| &p * &s,
+            BatchSize::SmallInput
+        )
+    });
+}
+
 criterion_group!(
     name = benches;
     //config = Criterion::default().sample_size(10);
     config = Criterion::default();
-    targets = allbases_multiexp_group, somebases_multiexp_group);
+    targets = single_exp_group, allbases_multiexp_group, somebases_multiexp_group);
 criterion_main!(benches);

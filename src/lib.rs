@@ -22,6 +22,35 @@ pub mod hashing_traits;
 pub mod verkle;
 pub mod verkle_ristretto;
 
+
+pub struct RunningAverage {
+    total_time_usec: f64,
+    total_measurements: usize,
+}
+
+impl RunningAverage {
+    pub fn new() -> Self {
+        RunningAverage {
+            total_time_usec: 0.0,
+            total_measurements: 0,
+        }
+    }
+
+    pub fn add(self: &mut Self, time_usec: u128, num_measurements: usize) {
+        self.total_time_usec += time_usec as f64;
+        self.total_measurements += num_measurements;
+    }
+
+    pub fn average(self) -> f64 {
+        self.total_time_usec / self.total_measurements as f64
+    }
+
+    pub fn reset(self: &mut Self) {
+        self.total_time_usec = 0.0;
+        self.total_measurements = 0;
+    }
+}
+
 pub fn max_leaves(arity: usize, height: usize) -> usize {
     arity.pow(height as u32)
 }

@@ -154,6 +154,12 @@ pub trait CreateFromPoint {
     fn create(point: &Self::Point) -> Self;
 }
 
+pub trait Compressable {
+    type CompressedPoint;
+
+    fn compress(self: &Self) -> Self::CompressedPoint;
+}
+
 impl RistrettoBasepointTable {
     pub fn basepoint(&self) -> RistrettoPoint {
         RistrettoPoint(self.0.basepoint())
@@ -165,5 +171,13 @@ impl CreateFromPoint for RistrettoBasepointTable {
 
     fn create(point: &Self::Point) -> Self {
         RistrettoBasepointTable(DalekRistrBasepointTable::create(&point.0))
+    }
+}
+
+impl Compressable for RistrettoPoint {
+    type CompressedPoint = CompressedRistretto;
+
+    fn compress(self: &RistrettoPoint) -> Self::CompressedPoint {
+        CompressedRistretto(self.0.compress())
     }
 }

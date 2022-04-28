@@ -93,6 +93,9 @@ fn main() {
             );
 
             bench_merkle(&mut merklepp, num_leaves, num_updates);
+
+            println!("Average time per incremental hash: {:.2} us", merklepp.hasher.avg_hash_time.average());
+            println!("Average time per accumulation (compress/decompress): {:.2} us", merklepp.hasher.avg_accum_time.average());
         }
         "merkle++naive" => {
             let mut merklepp = new_merklepp_from_leaves::<RistBlakeIncHash, RistBlakeIncHash>(
@@ -111,6 +114,11 @@ fn main() {
             );
 
             bench_merkle(&mut verkle, num_leaves, num_updates);
+
+            println!("Average time to push updates (Vec::new, hash_to_scalar): {:.2} us", verkle.hasher.avg_push_updates_time.average());
+            println!("Average time per exponentiation: {:.2} us", verkle.hasher.avg_exp_time.average());
+            // println!(" * Average time per clone: {:.2} us", verkle.hasher.avg_clone_time.average());
+            println!("Average time per accumulation (compress/decompress): {:.2} us", verkle.hasher.avg_accum_time.average());
         }
         _ => {
             println!("Unknown type of Merkle tree provided: {}", args._type)
@@ -147,10 +155,12 @@ fn bench_merkle<HashType, Hasher>(
 
     println!(
         "Total hashes computed: {}\n\
-         * Hashes per second: {}\n",
+         * Hashes per second: {}\n\
+         * Time per hash: {:.2} us\n",
         merkle.hasher.get_num_computations().separate_with_commas(),
         (((merkle.hasher.get_num_computations() as f64 / duration.as_millis() as f64) * 1000.0)
             as usize)
-            .separate_with_commas()
+            .separate_with_commas(),
+        duration.as_micros() as f64 / merkle.hasher.get_num_computations() as f64
     );
 }
