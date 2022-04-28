@@ -6,7 +6,6 @@ use rust_incrhash::compressed_ristretto::CompRistBlakeIncHash;
 use rust_incrhash::ristretto::RistBlakeIncHash;
 use merkle_race::merkle_pp::{hash_child, MerkleppHashValue};
 use merkle_race::verkle::hash_to_scalar;
-use merkle_race::verkle_ristretto::CompressedRistretto;
 
 pub fn hash_to_scalar_benchmark<M: Measurement>(
     c: &mut BenchmarkGroup<M>,
@@ -15,7 +14,7 @@ pub fn hash_to_scalar_benchmark<M: Measurement>(
 
     c.throughput(Throughput::Elements(1));
     c.bench_function("hash_to_scalar", move |b| {
-        let p = CompressedRistretto((&RISTRETTO_BASEPOINT_TABLE * &Scalar::random(&mut rng)).compress());
+        let p = (&RISTRETTO_BASEPOINT_TABLE * &Scalar::random(&mut rng)).compress();
         b.iter(||
             hash_to_scalar(&p)
         )

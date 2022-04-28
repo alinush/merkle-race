@@ -2,65 +2,69 @@ use std::borrow::Borrow;
 use crate::merkle_abstract::AbstractMerkle;
 use crate::hashing_traits::TreeHasherFunc;
 use serde::Serialize;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::marker::PhantomData;
+use std::ops::{Add, AddAssign, Mul};
 use std::time::Instant;
 use blake2::{Digest, Blake2b};
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoBasepointTable, RistrettoPoint, VartimeRistrettoSubsetPrecomputation};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::{Identity, VartimePrecomputedSubsetMultiscalarMul};
 use digest::consts::U64;
 use more_asserts::assert_le;
 use crate::RunningAverage;
+use crate::verkle_ristretto::{Compressable, CreateFromPoint};
 
 // TODO: use Rust unions instead, to avoid the 1-byte tagging overhead
 #[derive(Clone)]
-pub enum VerkleComm {
-    Internal(CompressedRistretto),
+pub enum VerkleComm<SmallGroupElem> {
+    Internal(SmallGroupElem),
     Leaf(Scalar),
     Empty,
 }
 
-impl Default for VerkleComm
+impl<SmallGroupElem: Identity> Default for VerkleComm<SmallGroupElem>
 {
     fn default() -> Self {
-        //VerkleComm::Internal(CompressedRistretto::identity())
+        //VerkleComm::Internal(SmallGroupElem::identity())
         VerkleComm::Empty
     }
 }
 
-impl Debug for VerkleComm {
+impl<SmallGroupElem: Display> Debug for VerkleComm<SmallGroupElem> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            VerkleComm::Internal(c) => write!(f, "{}", hex::encode(c.as_bytes())),
+            VerkleComm::Internal(c) => write!(f, "{}", c),
             VerkleComm::Leaf(a) => write!(f, "{}", hex::encode(a.as_bytes())),
             VerkleComm::Empty => write!(f, "empty node")
         }
     }
 }
 
-pub struct VerkleHasher {
+pub struct VerkleHasher<FastGroupElem, MultiscalarMulPrecomp, BasepointTable> {
     num_hashes: usize,
     arity: usize,
-    precomp: VartimeRistrettoSubsetPrecomputation,
-    base_tables: Vec<RistrettoBasepointTable>,
-    pub avg_single_exp_time: RunningAverage,
-    pub avg_multi_exp_time: RunningAverage,
+    h: PhantomData<FastGroupElem>,
+    precomp: MultiscalarMulPrecomp,
+    base_tables: Vec<BasepointTable>,
     pub avg_exp_time: RunningAverage,
     pub avg_accum_time: RunningAverage,
     // pub avg_clone_time: RunningAverage,
     pub avg_push_updates_time: RunningAverage,
 }
 
-impl VerkleHasher
+impl<FastGroupElem, MultiscalarMulPrecomp, BasepointTable> VerkleHasher<FastGroupElem, MultiscalarMulPrecomp, BasepointTable>
+where
+    MultiscalarMulPrecomp: VartimePrecomputedSubsetMultiscalarMul<Point = FastGroupElem>,
+    FastGroupElem: Clone + Borrow<<MultiscalarMulPrecomp as VartimePrecomputedSubsetMultiscalarMul>::Point>,
+    BasepointTable: CreateFromPoint<Point = FastGroupElem>,
 {
-    fn new(arity: usize, bases: Vec<RistrettoPoint>) -> Self {
+    fn new(arity: usize, bases: Vec<FastGroupElem>) -> Self {
         VerkleHasher {
             num_hashes: 0,
             arity,
-            precomp: VartimeRistrettoSubsetPrecomputation::new(bases.clone()),
-            base_tables: bases.into_iter().map(|point| RistrettoBasepointTable::create(&point)).collect(),
-            avg_single_exp_time: RunningAverage::new(),
-            avg_multi_exp_time: RunningAverage::new(),
+            h: Default::default(),
+            precomp: MultiscalarMulPrecomp::new(bases.clone()),
+            base_tables: bases.into_iter().map(|point| BasepointTable::create(&point)).collect(),
             avg_exp_time: RunningAverage::new(),
             avg_accum_time: RunningAverage::new(),
             // avg_clone_time: RunningAverage::new(),
@@ -77,8 +81,13 @@ where
 }
 
 // because we'll store CompressedRistretto but multiexp on RistrettoPoint's
-impl TreeHasherFunc<String, VerkleComm>
-    for VerkleHasher
+impl<FastGroupElem, SmallGroupElem, MultiscalarMulPrecomp, BasepointTable> TreeHasherFunc<String, VerkleComm<SmallGroupElem>>
+    for VerkleHasher<FastGroupElem, MultiscalarMulPrecomp, BasepointTable>
+where
+    FastGroupElem: AddAssign + Identity + Compressable<CompressedPoint = SmallGroupElem>,
+    SmallGroupElem: Serialize + Add<FastGroupElem, Output = SmallGroupElem> + Identity,
+    MultiscalarMulPrecomp: VartimePrecomputedSubsetMultiscalarMul<Point = FastGroupElem>,
+    BasepointTable: Clone + Mul<Scalar, Output = FastGroupElem>,
 {
     fn get_num_computations(&self) -> usize {
         self.num_hashes
@@ -88,22 +97,22 @@ impl TreeHasherFunc<String, VerkleComm>
     //     true
     // }
 
-    fn hash_leaf_data(&mut self, _offset: usize, data: String) -> VerkleComm {
+    fn hash_leaf_data(&mut self, _offset: usize, data: String) -> VerkleComm<SmallGroupElem> {
         // TODO: allow choice of inner hash function here via template parameter
         let mut hasher = Blake2b::<U64>::new();
 
         hasher.update("leaf:".as_bytes());
         hasher.update(data.as_bytes());
 
-        VerkleComm::Leaf(Scalar::from_hash(hasher))
+        VerkleComm::<SmallGroupElem>::Leaf(Scalar::from_hash(hasher))
     }
 
     fn hash_nodes(
         &mut self,
-        old_parent_comm: VerkleComm,
-        old_children: &mut Vec<VerkleComm>,
-        new_children: &Vec<(usize, VerkleComm)>,
-    ) -> VerkleComm {
+        old_parent_comm: VerkleComm<SmallGroupElem>,
+        old_children: &mut Vec<VerkleComm<SmallGroupElem>>,
+        new_children: &Vec<(usize, VerkleComm<SmallGroupElem>)>,
+    ) -> VerkleComm<SmallGroupElem> {
         assert_le!(new_children.len(), self.arity);
 
         // TODO(Perf): Can trade-off double the storage for less than double the speed here
@@ -157,21 +166,22 @@ impl TreeHasherFunc<String, VerkleComm>
         // NOTE(Perf): If the # of updates is small, just do normal exps!
         let num_measurements = updates.len();
         self.num_hashes += updates.len();
-        let mut delta = RistrettoPoint::identity();
+        let mut delta = FastGroupElem::identity();
 
         let start = Instant::now();
-        let num_exps = updates.len();
-        if num_exps <= 4 {
+        if updates.len() <= 4 {
             // NOTE: Run benches/multiexp.rs to figure out what cutoff to use for updates.len()
+            // * Average time per clone: 1.29 us (but this multiples by average # of updates)
             for (index, exp) in updates {
-                let start = Instant::now();
-                delta += &self.base_tables[index] * &exp;
-                self.avg_single_exp_time.add(start.elapsed().as_micros(), 1);
+                // TODO(Perf): I am cloning a rather large object here because I can't figure out Rust
+                //let start = Instant::now();
+                let point = self.base_tables[index].clone();
+                //self.avg_clone_time.add(start.elapsed().as_micros(), 1);
+
+                delta += point * exp;
             }
         } else {
-            let start = Instant::now();
             delta = self.precomp.vartime_subset_multiscalar_mul(updates);
-            self.avg_multi_exp_time.add(start.elapsed().as_micros(), num_exps);
         }
         self.avg_exp_time.add(start.elapsed().as_micros(), num_measurements);
 
@@ -201,22 +211,32 @@ impl TreeHasherFunc<String, VerkleComm>
     }
 }
 
-pub fn new_verkle_from_height(
+pub fn new_verkle_from_height<FastGroupElem, SmallGroupElem, MultiscalarMulPrecomp, BasepointTable>(
     arity: usize,
     height: usize,
-    bases: Vec<RistrettoPoint>,
-) -> AbstractMerkle<String, VerkleComm, VerkleHasher>
+    bases: Vec<FastGroupElem>,
+) -> AbstractMerkle<String, VerkleComm<SmallGroupElem>, VerkleHasher<FastGroupElem, MultiscalarMulPrecomp, BasepointTable>>
+where
+    FastGroupElem: Clone + AddAssign + Identity + Compressable<CompressedPoint = SmallGroupElem>,
+    SmallGroupElem: Clone + Default + Serialize + Add<FastGroupElem, Output = SmallGroupElem> + Identity,
+    MultiscalarMulPrecomp: VartimePrecomputedSubsetMultiscalarMul<Point = FastGroupElem>,
+    BasepointTable: Clone + CreateFromPoint<Point = FastGroupElem> + Mul<Scalar, Output = FastGroupElem>,
 {
     let hasher = VerkleHasher::new(arity, bases);
 
     AbstractMerkle::new(arity, height, hasher)
 }
 
-pub fn new_verkle_from_leaves(
+pub fn new_verkle_from_leaves<FastGroupElem, SmallGroupElem, MultiscalarMulPrecomp, BasepointTable>(
     arity: usize,
     num_leaves: usize,
-    bases: Vec<RistrettoPoint>,
-) -> AbstractMerkle<String, VerkleComm, VerkleHasher>
+    bases: Vec<FastGroupElem>,
+) -> AbstractMerkle<String, VerkleComm<SmallGroupElem>, VerkleHasher<FastGroupElem, MultiscalarMulPrecomp, BasepointTable>>
+where
+    FastGroupElem: Clone + AddAssign + Identity + Compressable<CompressedPoint = SmallGroupElem>,
+    SmallGroupElem: Clone + Default + Serialize + Add<FastGroupElem, Output = SmallGroupElem> + Identity,
+    MultiscalarMulPrecomp: VartimePrecomputedSubsetMultiscalarMul<Point = FastGroupElem>,
+    BasepointTable: Clone + CreateFromPoint<Point = FastGroupElem> + Mul<Scalar, Output = FastGroupElem>,
 {
     let hasher = VerkleHasher::new(arity, bases);
 

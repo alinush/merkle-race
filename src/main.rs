@@ -9,13 +9,13 @@ use thousands::Separable;
 
 use clap::Parser;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
+use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use rand::thread_rng;
 use merkle_race::merkle_pp::new_merklepp_from_leaves;
 use rust_incrhash::compressed_ristretto::CompRistBlakeIncHash;
 use rust_incrhash::ristretto::RistBlakeIncHash;
 use merkle_race::verkle::new_verkle_from_leaves;
-use merkle_race::verkle_ristretto::{CompressedRistretto, RistrettoBasepointTable, RistrettoPoint, VartimeRistrettoSubsetPrecomputation};
 
 /// Program to benchmark three types of Merkle trees: traditional CRHF-based Merkle,
 /// incrementally-hashed Merkle (or Merkle++), and VC-based Merkle (or Verkle)
@@ -107,17 +107,25 @@ fn main() {
         "verkle" => {
             let mut rng = thread_rng();
             let bases = (0..args.arity).map(|_|
-                RistrettoPoint(&Scalar::random(&mut rng) * &RISTRETTO_BASEPOINT_TABLE)).collect::<Vec<RistrettoPoint>>();
+                (&Scalar::random(&mut rng) * &RISTRETTO_BASEPOINT_TABLE)).collect::<Vec<RistrettoPoint>>();
 
-            let mut verkle = new_verkle_from_leaves::<RistrettoPoint, CompressedRistretto, VartimeRistrettoSubsetPrecomputation, RistrettoBasepointTable>(
+            let mut verkle = new_verkle_from_leaves(
                 args.arity, num_leaves, bases,
             );
 
             bench_merkle(&mut verkle, num_leaves, num_updates);
 
             println!("Average time to push updates (Vec::new, hash_to_scalar): {:.2} us", verkle.hasher.avg_push_updates_time.average());
-            println!("Average time per exponentiation: {:.2} us", verkle.hasher.avg_exp_time.average());
+
+            println!("Average time per *single* exponentiation: {:.2} us", verkle.hasher.avg_single_exp_time.average());
+            println!(" * # of *single* exponentiations: {}", verkle.hasher.avg_single_exp_time.total_measurements.separate_with_commas());
+
+            println!("Average exponentiation time via *multiexps*: {:.2} us", verkle.hasher.avg_multi_exp_time.average());
+            println!(" * # of such exponentiations: {}", verkle.hasher.avg_multi_exp_time.total_measurements.separate_with_commas());
+
+            println!("Average time per (any) exponentiation: {:.2} us", verkle.hasher.avg_exp_time.average());
             // println!(" * Average time per clone: {:.2} us", verkle.hasher.avg_clone_time.average());
+
             println!("Average time per accumulation (compress/decompress): {:.2} us", verkle.hasher.avg_accum_time.average());
         }
         _ => {
