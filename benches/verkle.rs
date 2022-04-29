@@ -31,7 +31,7 @@ pub fn incrhash_benchmark<M: Measurement>(
         let random_bytes: Vec<u8> =
             (0..32).map(|_| rng.gen::<u8>()).collect();
         let h = CompRistBlakeIncHash::from(random_bytes.as_slice());
-        let hv = MerkleppHashValue::<CompRistBlakeIncHash>::Internal(h);
+        let hv = MerkleppHashValue::<CompRistBlakeIncHash>::InternalThin(h);
         let i = rng.gen::<u8>() as usize;
 
         b.iter(||

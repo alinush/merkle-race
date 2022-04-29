@@ -89,7 +89,7 @@ fn main() {
         }
         "merkle++" => {
             let mut merklepp = new_merklepp_from_leaves::<CompRistBlakeIncHash, RistBlakeIncHash>(
-                args.arity, num_leaves,
+                args.arity, num_leaves, false,
             );
 
             bench_merkle(&mut merklepp, num_leaves, num_updates);
@@ -100,7 +100,7 @@ fn main() {
         }
         "merkle++naive" => {
             let mut merklepp = new_merklepp_from_leaves::<RistBlakeIncHash, RistBlakeIncHash>(
-                args.arity, num_leaves,
+                args.arity, num_leaves, false,
             );
 
             bench_merkle(&mut merklepp, num_leaves, num_updates);

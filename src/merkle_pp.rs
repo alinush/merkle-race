@@ -11,22 +11,38 @@ use digest::consts::U32;
 use digest::generic_array::GenericArray;
 use crate::{HistogramAverages, RunningAverage};
 
+// NOTE(Perf): Apparently, just doubling the size of this enum increases our execution time from
+// 18s to 24s a 2B Merkle++ with 200K updates
+#[derive(Clone)]
+pub struct FatMerkleppNode<SmallIncHash> {
+    actual_hash: SmallIncHash,
+    hash_of_hash: SmallIncHash,
+}
+
+impl<SmallIncHash: Display> Display for FatMerkleppNode<SmallIncHash> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "actual hash: {}, hash of hash: {}", self.actual_hash, self.hash_of_hash)
+    }
+}
+
 #[derive(Clone)]
 pub enum MerkleppHashValue<SmallIncHash> {
-    Internal(SmallIncHash),
+    InternalThin(SmallIncHash),
+    InternalFat(FatMerkleppNode::<SmallIncHash>),
     Leaf([u8; HASH_LENGTH]),
 }
 
 impl<SmallIncHash: Default> Default for MerkleppHashValue<SmallIncHash> {
     fn default() -> Self {
-        MerkleppHashValue::Internal(SmallIncHash::default())
+        MerkleppHashValue::InternalThin(SmallIncHash::default())
     }
 }
 
 impl<SmallIncHash: Display> Debug for MerkleppHashValue<SmallIncHash> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            MerkleppHashValue::Internal(incr_hash) => write!(f, "{}", incr_hash),
+            MerkleppHashValue::InternalThin(incr_hash) => write!(f, "{}", incr_hash),
+            MerkleppHashValue::InternalFat(fat) => write!(f, "{}", fat),
             MerkleppHashValue::Leaf(normal_hash) => write!(f, "{}", hex::encode(normal_hash)),
         }
     }
@@ -36,16 +52,18 @@ pub struct IncrementalHasher<FastIncHash> {
     num_hashes: usize,
     arity: usize,
     h: PhantomData<FastIncHash>,
+    is_fat: bool,
     pub hash_nodes_histogram: HistogramAverages,
     pub avg_hash_time: RunningAverage,
     pub avg_accum_time: RunningAverage,
 }
 
 impl<FastIncHash> IncrementalHasher<FastIncHash> {
-    fn new(arity: usize) -> Self {
+    fn new(arity: usize, is_fat: bool) -> Self {
         IncrementalHasher {
             num_hashes: 0,
             arity,
+            is_fat,
             h: Default::default(),
             hash_nodes_histogram: HistogramAverages::new(arity),
             avg_hash_time: RunningAverage::new(),
@@ -64,23 +82,23 @@ where
     SmallIncHash: Serialize,
     for<'a> FastIncHash: From<&'a [u8]>,
 {
+    let mut bytes;
     match child_hash {
-        MerkleppHashValue::Internal(incr_hash) => {
-            let mut bytes = bincode::serialize(incr_hash).unwrap();
+        MerkleppHashValue::InternalThin(incr_hash) => {
+            bytes = bincode::serialize(incr_hash).unwrap();
             assert_eq!(bytes.len(), 32);
-
-            bytes.append(bincode::serialize(&i).unwrap().as_mut());
-
-            FastIncHash::from(bytes.as_slice())
         }
         MerkleppHashValue::Leaf(leaf_hash) => {
-            let mut bytes = leaf_hash.to_vec();
-
-            bytes.append(bincode::serialize(&i).unwrap().as_mut());
-
-            FastIncHash::from(bytes.as_slice())
+            bytes = leaf_hash.to_vec();
+        }
+        MerkleppHashValue::InternalFat(fat) => {
+            bytes = bincode::serialize(&fat.actual_hash).unwrap();
         }
     }
+
+    bytes.append(bincode::serialize(&i).unwrap().as_mut());
+
+    FastIncHash::from(bytes.as_slice())
 }
 
 impl<SmallIncHash, FastIncHash> TreeHasherFunc<String, MerkleppHashValue<SmallIncHash>>
@@ -148,7 +166,7 @@ where
         } else {
             // if less than half the siblings changed, incrementally update the parent
             incr_hash = match old_parent_hash {
-                MerkleppHashValue::<SmallIncHash>::Internal(hash) => hash,
+                MerkleppHashValue::<SmallIncHash>::InternalThin(hash) => hash,
                 _ => unreachable!(),
             };
 
@@ -170,19 +188,20 @@ where
 
 
         self.hash_nodes_histogram.add(new_children.len(), start.elapsed().as_micros());
-        MerkleppHashValue::<SmallIncHash>::Internal(incr_hash)
+        MerkleppHashValue::<SmallIncHash>::InternalThin(incr_hash)
     }
 }
 
 pub fn new_merklepp_from_height<SmallIncHash, FastIncHash>(
     arity: usize,
     height: usize,
+    is_fat: bool,
 ) -> AbstractMerkle<String, MerkleppHashValue<SmallIncHash>, IncrementalHasher<FastIncHash>>
 where
     SmallIncHash: Clone + Default + Serialize + AddAssign<FastIncHash>,
     for<'a> FastIncHash: Default + AddAssign + SubAssign + From<&'a [u8]>,
 {
-    let hasher = IncrementalHasher::new(arity);
+    let hasher = IncrementalHasher::new(arity, is_fat);
 
     AbstractMerkle::new(arity, height, hasher)
 }
@@ -191,12 +210,13 @@ where
 pub fn new_merklepp_from_leaves<SmallIncHash, FastIncHash>(
     arity: usize,
     num_leaves: usize,
+    is_fat: bool,
 ) -> AbstractMerkle<String, MerkleppHashValue<SmallIncHash>, IncrementalHasher<FastIncHash>>
 where
     SmallIncHash: Clone + Default + Serialize + AddAssign<FastIncHash>,
     for<'a> FastIncHash: Default + AddAssign + SubAssign + From<&'a [u8]>,
 {
-    let hasher = IncrementalHasher::new(arity);
+    let hasher = IncrementalHasher::new(arity, is_fat);
 
     AbstractMerkle::with_num_leaves(arity, num_leaves, hasher)
 }
