@@ -94,8 +94,9 @@ fn main() {
 
             bench_merkle(&mut merklepp, num_leaves, num_updates);
 
-            println!("Average time per incremental hash: {:.2} us", merklepp.hasher.avg_hash_time.average());
-            println!("Average time per accumulation (compress/decompress): {:.2} us", merklepp.hasher.avg_accum_time.average());
+            println!("Average time per incremental hash: {}", merklepp.hasher.avg_hash_time);
+            println!("Average time per accumulation (compress/decompress): {}", merklepp.hasher.avg_accum_time);
+            println!("hash_nodes histogram:\n{}", merklepp.hasher.hash_nodes_histogram);
         }
         "merkle++naive" => {
             let mut merklepp = new_merklepp_from_leaves::<RistBlakeIncHash, RistBlakeIncHash>(
@@ -115,18 +116,17 @@ fn main() {
 
             bench_merkle(&mut verkle, num_leaves, num_updates);
 
-            println!("Average time to push updates (Vec::new, hash_to_scalar): {:.2} us", verkle.hasher.avg_push_updates_time.average());
+            println!("Average time to push updates (Vec::new, hash_to_scalar): {:.2}", verkle.hasher.avg_push_updates_time);
 
-            println!("Average time per *single* exponentiation: {:.2} us", verkle.hasher.avg_single_exp_time.average());
-            println!(" * # of *single* exponentiations: {}", verkle.hasher.avg_single_exp_time.total_measurements.separate_with_commas());
+            println!("Average time per *single* exponentiation: {:.2}", verkle.hasher.avg_single_exp_time);
 
-            println!("Average exponentiation time via *multiexps*: {:.2} us", verkle.hasher.avg_multi_exp_time.average());
-            println!(" * # of such exponentiations: {}", verkle.hasher.avg_multi_exp_time.total_measurements.separate_with_commas());
+            println!("Average exponentiation time via *multiexps*: {:.2}", verkle.hasher.avg_multi_exp_time);
 
-            println!("Average time per (any) exponentiation: {:.2} us", verkle.hasher.avg_exp_time.average());
-            // println!(" * Average time per clone: {:.2} us", verkle.hasher.avg_clone_time.average());
+            println!("Average time per (any) exponentiation: {:.2}", verkle.hasher.avg_exp_time);
+            // println!(" * Average time per clone: {:.2}", verkle.hasher.avg_clone_time);
 
-            println!("Average time per accumulation (compress/decompress): {:.2} us", verkle.hasher.avg_accum_time.average());
+            println!("Average time per accumulation (compress/decompress): {:.2}", verkle.hasher.avg_accum_time);
+            println!("hash_nodes histogram:\n{}", verkle.hasher.hash_nodes_histogram);
         }
         _ => {
             println!("Unknown type of Merkle tree provided: {}", args._type)

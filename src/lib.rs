@@ -1,5 +1,6 @@
 extern crate core;
 
+use std::fmt::{Display, Formatter};
 use itertools::Itertools;
 use rand::distributions::Alphanumeric;
 use rand::prelude::IteratorRandom;
@@ -7,6 +8,7 @@ use rand::Rng;
 use std::iter::zip;
 use std::time::Instant;
 use std::vec::IntoIter;
+use more_asserts::{debug_assert_gt, assert_gt, debug_assert_lt, assert_lt};
 use thousands::Separable;
 
 //#![feature(is_sorted)]
@@ -47,6 +49,37 @@ impl RunningAverage {
     pub fn reset(&mut self) {
         self.total_time_usec = 0.0;
         self.total_measurements = 0;
+    }
+}
+
+impl Display for RunningAverage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:.2} us ({} samples)", self.average(), self.total_measurements)
+    }
+}
+
+pub struct HistogramAverages {
+    average: Vec<RunningAverage>
+}
+
+impl HistogramAverages {
+    pub fn new(num: usize) -> Self {
+        HistogramAverages {
+            average: (0..num).map(|_| RunningAverage::new()).collect()
+        }
+    }
+
+    // idx is from 1 to N
+    pub fn add(&mut self, idx: usize, time_usec: u128) {
+        debug_assert_gt!(idx, 0);
+        debug_assert_lt!(idx - 1, self.average.len());
+        self.average[idx - 1].add(time_usec, 1);
+    }
+}
+
+impl Display for HistogramAverages {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        (0..self.average.len()).map(|idx| write!(f, "{} -> {}\n", idx + 1, self.average[idx])).collect()
     }
 }
 

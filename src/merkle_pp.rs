@@ -9,7 +9,7 @@ use std::time::Instant;
 use blake2::{Digest, Blake2b};
 use digest::consts::U32;
 use digest::generic_array::GenericArray;
-use crate::RunningAverage;
+use crate::{HistogramAverages, RunningAverage};
 
 #[derive(Clone)]
 pub enum MerkleppHashValue<SmallIncHash> {
@@ -36,6 +36,7 @@ pub struct IncrementalHasher<FastIncHash> {
     num_hashes: usize,
     arity: usize,
     h: PhantomData<FastIncHash>,
+    pub hash_nodes_histogram: HistogramAverages,
     pub avg_hash_time: RunningAverage,
     pub avg_accum_time: RunningAverage,
 }
@@ -46,6 +47,7 @@ impl<FastIncHash> IncrementalHasher<FastIncHash> {
             num_hashes: 0,
             arity,
             h: Default::default(),
+            hash_nodes_histogram: HistogramAverages::new(arity),
             avg_hash_time: RunningAverage::new(),
             avg_accum_time: RunningAverage::new(),
         }
@@ -162,11 +164,12 @@ where
         self.avg_hash_time.add(start.elapsed().as_micros(), num_hashes);
 
 
-        let start = Instant::now();
+        let start_acc = Instant::now();
         incr_hash += acc;
-        self.avg_accum_time.add(start.elapsed().as_micros(), 1);
+        self.avg_accum_time.add(start_acc.elapsed().as_micros(), 1);
 
 
+        self.hash_nodes_histogram.add(new_children.len(), start.elapsed().as_micros());
         MerkleppHashValue::<SmallIncHash>::Internal(incr_hash)
     }
 }

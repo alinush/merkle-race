@@ -10,7 +10,7 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::{Identity, VartimePrecomputedSubsetMultiscalarMul};
 use digest::consts::U64;
 use more_asserts::assert_le;
-use crate::RunningAverage;
+use crate::{HistogramAverages, RunningAverage};
 
 // TODO: use Rust unions instead, to avoid the 1-byte tagging overhead
 #[derive(Clone)]
@@ -43,6 +43,7 @@ pub struct VerkleHasher {
     arity: usize,
     precomp: VartimeRistrettoSubsetPrecomputation,
     base_tables: Vec<RistrettoBasepointTable>,
+    pub hash_nodes_histogram: HistogramAverages,
     pub avg_single_exp_time: RunningAverage,
     pub avg_multi_exp_time: RunningAverage,
     pub avg_exp_time: RunningAverage,
@@ -59,6 +60,7 @@ impl VerkleHasher
             arity,
             precomp: VartimeRistrettoSubsetPrecomputation::new(bases.clone()),
             base_tables: bases.into_iter().map(|point| RistrettoBasepointTable::create(&point)).collect(),
+            hash_nodes_histogram: HistogramAverages::new(arity),
             avg_single_exp_time: RunningAverage::new(),
             avg_multi_exp_time: RunningAverage::new(),
             avg_exp_time: RunningAverage::new(),
@@ -155,12 +157,12 @@ impl TreeHasherFunc<String, VerkleComm>
         assert_le!(updates.len(), self.arity);
 
         // NOTE(Perf): If the # of updates is small, just do normal exps!
-        let num_measurements = updates.len();
-        self.num_hashes += updates.len();
+        let num_exps = updates.len();
+        let num_measurements = num_exps;
+        self.num_hashes += num_exps;
         let mut delta = RistrettoPoint::identity();
 
-        let start = Instant::now();
-        let num_exps = updates.len();
+        let start_exp = Instant::now();
         if num_exps <= 4 {
             // NOTE: Run benches/multiexp.rs to figure out what cutoff to use for updates.len()
             for (index, exp) in updates {
@@ -173,13 +175,19 @@ impl TreeHasherFunc<String, VerkleComm>
             delta = self.precomp.vartime_subset_multiscalar_mul(updates);
             self.avg_multi_exp_time.add(start.elapsed().as_micros(), num_exps);
         }
-        self.avg_exp_time.add(start.elapsed().as_micros(), num_measurements);
+        self.avg_exp_time.add(start_exp.elapsed().as_micros(), num_measurements);
 
 
-        match old_parent_comm {
+        let new_parent = match old_parent_comm {
             VerkleComm::Empty => {
                 let start = Instant::now();
                 let comp = delta.compress();
+
+                // NOTE(Perf): In practice, we would pay this cost when decompressing the parent, but
+                // in this implementation the parents are VerkleComm::Empty by default, so that's why
+                // I'm adding it here, so as to get correct numbers.
+                comp.decompress();
+
                 self.avg_accum_time.add(start.elapsed().as_micros(), 1);
 
                 VerkleComm::Internal(comp)
@@ -197,7 +205,11 @@ impl TreeHasherFunc<String, VerkleComm>
             },
 
             VerkleComm::Leaf(_) => unreachable!("Expected non-leaf parent node in VerkleHasher::hash_nodes"),
-        }
+        };
+
+        self.hash_nodes_histogram.add(num_exps, start.elapsed().as_micros());
+
+        new_parent
     }
 }
 
