@@ -1,3 +1,5 @@
+mod realworld;
+
 use std::iter::zip;
 use criterion::{criterion_group, criterion_main, measurement::Measurement, BenchmarkGroup, BenchmarkId, Criterion, Throughput, BatchSize};
 use rand::thread_rng;

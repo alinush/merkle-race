@@ -23,14 +23,23 @@ sha3 = "0.10.1"
 tiny-keccak = { version = "2.0.2", features = ["sha3"] }
 itertools = "0.10.3"
 thousands = "0.2.0"
+rocksdb = "0.19.0"
+sha2 = "0.10.5"
+serde_json = "1.0.85"
+lazy_static = "1.4.0"
+once_cell = "1.14.0"
 
 [profile.release]
 debug = true    # for cargo flamegraph to be able to profile in release mode
 
-[[bench]]
-name = "multiexp"
-harness = false
+#[[bench]]
+#name = "multiexp"
+#harness = false
+#
+#[[bench]]
+#name = "verkle"
+#harness = false
 
 [[bench]]
-name = "verkle"
+name = "realworld"
 harness = false

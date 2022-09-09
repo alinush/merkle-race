@@ -22,7 +22,7 @@ pub mod merkle_pp;
 pub mod node_index;
 pub mod hashing_traits;
 pub mod verkle;
-
+pub mod verkle2;
 
 pub struct RunningAverage {
     total_time_usec: f64,

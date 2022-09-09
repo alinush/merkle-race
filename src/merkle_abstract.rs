@@ -463,7 +463,7 @@ impl<LeafDataType, HashType, Hasher> AbstractMerkle<LeafDataType, HashType, Hash
                 // first, compute the updated parent hash and schedule it to be processed later
                 //println!("Hashing and queueing parent {}", parent_idx.0);
                 debug_assert!(self._hashed_nodes.insert(parent_idx));
-                let hash = self.hasher.hash_nodes(
+                let hash: HashType = self.hasher.hash_nodes(
                     self.get_node_hash(&parent_idx).unwrap(),
                     &mut old_siblings,
                     &new_siblings,
