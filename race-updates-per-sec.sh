@@ -18,7 +18,7 @@ arity="
 512
 1024"
 
-if [ $# -lt 1 ]; then
+if [ $# -lt 2 ]; then
     echo "Usage: $0 <merkle-type> <output-csv-file> [<batch_size>]"
     echo
     echo "<merkle-type> can be either 'merkle_sha3', 'merkle_tiny_sha3', 'merkle_blake2s', 'merkle_blake2b', 'merkle++', or 'verkle'"

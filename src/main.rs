@@ -157,7 +157,7 @@ fn bench_merkle<HashType, Hasher>(
          * Updates per second: {}",
         num_updates.separate_with_commas(),
         duration,
-        (((num_updates as f64 / duration.as_millis() as f64) * 1000.0) as usize)
+        (((num_updates as f64 / duration.as_micros() as f64) * 1000.0 * 1000.0) as usize)
             .separate_with_commas()
     );
 
@@ -166,7 +166,7 @@ fn bench_merkle<HashType, Hasher>(
          * Hashes per second: {}\n\
          * Time per hash: {:.2} us\n",
         merkle.hasher.get_num_computations().separate_with_commas(),
-        (((merkle.hasher.get_num_computations() as f64 / duration.as_millis() as f64) * 1000.0)
+        (((merkle.hasher.get_num_computations() as f64 / duration.as_micros() as f64) * 1000.0 * 1000.0)
             as usize)
             .separate_with_commas(),
         duration.as_micros() as f64 / merkle.hasher.get_num_computations() as f64
