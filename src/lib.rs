@@ -8,6 +8,7 @@ use rand::Rng;
 use std::iter::zip;
 use std::time::Instant;
 use std::vec::IntoIter;
+use curve25519_dalek::ristretto::RistrettoPoint;
 use more_asserts::{debug_assert_gt, assert_gt, debug_assert_lt, assert_lt};
 use thousands::Separable;
 
@@ -23,6 +24,10 @@ pub mod node_index;
 pub mod hashing_traits;
 pub mod verkle;
 pub mod verkle2;
+pub mod ipa_multipoint;
+pub mod polynomial;
+
+type Commitment = RistrettoPoint;
 
 pub struct RunningAverage {
     total_time_usec: f64,

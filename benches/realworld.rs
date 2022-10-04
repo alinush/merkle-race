@@ -1,37 +1,42 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use criterion::{Criterion, criterion_group, criterion_main};
-use merkle_race::verkle2::{Key, KeyValuePair, Val, VerkleKvStore};
+use merkle_race::verkle2::{UserKey, UserKeyValuePair, NaiveVerkleIO, UserValue, VerkleKvStore};
 use rand::{Rng, thread_rng};
 use rand::distributions::{Alphanumeric, DistString};
 
-const batch_count : usize = 10000;
+const batch_count : usize = 100;
+const batch_size : usize = 1000;
 fn bench_group(c: &mut Criterion) {
-    c.bench_function(format!("{batch_count} bulk updates, 1000 keys in each batch").as_str(), |b| {
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    println!("ts={ts}");
+    c.bench_function(format!("{batch_count} bulk updates, {batch_size} keys in each batch").as_str(), |b| {
         //init db
-        let db : VerkleKvStore = VerkleKvStore::new("/tmp/verkle/b1".to_string()).unwrap();
+        let mut x = NaiveVerkleIO::new(format!("/tmp/verkledbs/{ts}").as_str());
+        let mut db = VerkleKvStore::new(&mut x, 16);
         //todo: grow it to
-        let batches : Vec<Vec<KeyValuePair>> = ((0..batch_count).map(|x|rand_key_value_pairs(100)).collect());
-        let mut target_version = db.get_latest_version_id().unwrap();
+        let batches : Vec<Vec<UserKeyValuePair>> = ((0..batch_count).map(|x|rand_key_value_pairs(batch_size)).collect());
+        let mut target_version = db.get_latest_version_id();
         b.iter(|| {
             for batch in batches.iter() {
-                target_version = db.batch_update(target_version,&batch).unwrap();
+                target_version = db.batch_update(target_version,&batch);
             }
         })
     });
 }
 
-fn rand_key() -> Key {
+fn rand_key() -> UserKey {
     Alphanumeric.sample_string(&mut thread_rng(), 32).into_bytes()
 }
 
-fn rand_value() -> Val {
-    Alphanumeric.sample_string(&mut thread_rng(), 128).into_bytes()
+fn rand_value() -> UserValue {
+    Alphanumeric.sample_string(&mut thread_rng(), 256).into_bytes()
 }
 
-fn rand_key_value_pairs(count: usize) -> Vec<KeyValuePair> {
-    (0..count).map(|x|(rand_key(),rand_value())).collect()
+fn rand_key_value_pairs(count: usize) -> Vec<UserKeyValuePair> {
+    let pairs = (0..count).map(|x|(rand_key(),rand_value())).collect();
+    pairs
 }
 
 
