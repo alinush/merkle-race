@@ -43,9 +43,9 @@ debug = true    # for cargo flamegraph to be able to profile in release mode
 #name = "verkle"
 #harness = false
 
-[[bench]]
-name = "realworld"
-harness = false
+#[[bench]]
+#name = "realworld"
+#harness = false
 
 [[bench]]
 name = "deps"

@@ -36,7 +36,7 @@ fn inner_product(a: &[Scalar], b: &[Scalar]) -> Scalar {
 }
 
 //Dependency shit.
-fn hash_bytes_to_scalar_ng(bytes: &[u8]) -> Scalar {
+pub fn hash_bytes_to_scalar_ng(bytes: &[u8]) -> Scalar {
     let v0 = Scalar0::hash_from_bytes::<Sha512>(bytes);
     Scalar::from_bits(v0.to_bytes())
 }

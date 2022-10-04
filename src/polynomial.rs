@@ -6,7 +6,7 @@ use curve25519_dalek_ng::ristretto::RistrettoPoint;
 use curve25519_dalek_ng::scalar::Scalar;
 use rand::thread_rng;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Polynomial {
     degree: usize,
     coefficients: BTreeMap<usize,Scalar>,
@@ -16,7 +16,7 @@ impl Polynomial {
     pub fn rand(degree: usize) -> Self {
         Self {
             degree,
-            coefficients: (0..degree).map(|i|(i,Scalar::random(&mut thread_rng()))).collect(),
+            coefficients: (0..degree+1).map(|i|(i,Scalar::random(&mut thread_rng()))).collect(),
         }
     }
 
@@ -45,7 +45,6 @@ impl Polynomial {
     }
 
     pub fn add_clause(&mut self, degree: usize, coefficient: &Scalar) {
-        self.degree = max(self.degree, degree);
         self.coefficients.entry(degree).and_modify(|v| *v+=*coefficient).or_insert(*coefficient);
         self.prune_zeros_update_degree();
     }
@@ -132,9 +131,10 @@ pub fn poly_mul(a:&Polynomial, b:&Polynomial) -> Polynomial {
 pub fn poly_div(a:&Polynomial, b:&Polynomial) -> (Polynomial, Polynomial) {
     let mut q = Polynomial::zero();
     let mut r = a.clone();
+    let b_high_coef_inv = b.coefficient(b.degree()).invert();
     while r.degree() >= b.degree() {
         let mut seg = Polynomial::zero();
-        let coef = r.coefficient(r.degree())*b.coefficient(b.degree()).invert();
+        let coef = r.coefficient(r.degree()) * b_high_coef_inv;
         seg.add_clause(r.degree()-b.degree(), &coef);
         let mut offsetter = poly_mul(&seg, &b);
         offsetter.neg();
@@ -142,6 +142,22 @@ pub fn poly_div(a:&Polynomial, b:&Polynomial) -> (Polynomial, Polynomial) {
         q.add(&seg);
     }
     (q,r)
+}
+
+#[test]
+fn inv_and_neg() {
+    let s = Scalar::one().neg();
+    let product = s*s;
+    assert!(Scalar::one().eq(&product));
+    assert!(Scalar::zero().eq(&(s+Scalar::one())));
+}
+
+#[test]
+fn div() {
+    let p0 = Polynomial::rand(1024);
+    let p1 = Polynomial::rand(1);
+    let (q,r) = poly_div(&p0, &p1);
+    println!("q={q:?},r={r:?}");
 }
 
 #[test]
