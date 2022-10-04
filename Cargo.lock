@@ -114,6 +114,7 @@ dependencies = [
 [[package]]
 name = "bulletproofs"
 version = "4.0.0"
+source = "git+https://github.com/zkcrypto/bulletproofs?rev=df6c41b#df6c41bd0a9d9e0a139d5fbfbd1ef6fd5a4ae49a"
 dependencies = [
  "byteorder",
  "clear_on_drop",

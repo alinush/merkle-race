@@ -123,7 +123,7 @@ pub fn gen_multipoint_proof(
     let dc = D.compress();
 
     let t = hash_bytes_to_scalar_ng(format!("{r_base:?},{dc:?}").as_bytes());
-    
+
     let mut poly_g1 = Polynomial::zero();
     for i in 0..n {
 
