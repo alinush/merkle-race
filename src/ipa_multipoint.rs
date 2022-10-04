@@ -1,11 +1,13 @@
 use bulletproofs::{BulletproofGens, LinearProof, PedersenGens};
 use std::ops::{AddAssign, Div, Mul, Neg};
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::VartimeMultiscalarMul;
-use sha2::Sha512;
 use crate::polynomial::{poly_div, Polynomial};
 use core::iter;
+use curve25519_dalek_ng::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek_ng::scalar::Scalar;
+use curve25519_dalek::scalar::Scalar as Scalar0;
+use curve25519_dalek_ng::traits::VartimeMultiscalarMul;
+use merlin::Transcript;
+use sha2::Sha512;
 
 /*
 what's the poly?
@@ -22,46 +24,62 @@ type Commitment = RistrettoPoint;
 
 type SingleProof = LinearProof;
 
+fn inner_product(a: &[Scalar], b: &[Scalar]) -> Scalar {
+    let mut out = Scalar::zero();
+    if a.len() != b.len() {
+        panic!("inner_product(a,b): lengths of vectors do not match");
+    }
+    for i in 0..a.len() {
+        out += a[i] * b[i];
+    }
+    out
+}
+
+//Dependency shit.
+fn hash_bytes_to_scalar_ng(bytes: &[u8]) -> Scalar {
+    let v0 = Scalar0::hash_from_bytes::<Sha512>(bytes);
+    Scalar::from_bits(v0.to_bytes())
+}
+
 pub fn gen_proof(polynomial: &Polynomial, x: Scalar, y: Scalar) -> LinearProof {
-    unimplemented!()
-    // let mut rng = rand::thread_rng();
-    //
-    // let bp_gens = BulletproofGens::new(*n, 1);
-    // // Calls `.G()` on generators, which should be a pub(crate) function only.
-    // // For now, make that function public so it can be accessed from benches.
-    // // We don't want to use bp_gens directly because we don't need the H generators.
-    // let G: Vec<RistrettoPoint> = bp_gens.share(0).G(*n).cloned().collect();
-    //
-    // let pedersen_gens = PedersenGens::default();
-    // let F = pedersen_gens.B;
-    // let B = pedersen_gens.B_blinding;
-    //
-    // // a and b are the vectors for which we want to prove c = <a,b>
-    // let a: Vec<_> = (0..*n).map(|_| Scalar::random(&mut rng)).collect();
-    // let b: Vec<_> = (0..*n).map(|_| Scalar::random(&mut rng)).collect();
-    //
-    // let mut transcript = Transcript::new(b"LinearProofBenchmark");
-    //
-    // // C = <a, G> + r * B + <a, b> * F
-    // let r: Scalar = Scalar::random(&mut rng);
-    // let c = inner_product(&a, &b);
-    // let C: CompressedRistretto = RistrettoPoint::vartime_multiscalar_mul(
-    //     a.iter().chain(iter::once(&r)).chain(iter::once(&c)),
-    //     G.iter().chain(iter::once(&B)).chain(iter::once(&F)),
-    // )
-    //     .compress();
-    //
-    // LinearProof::create(
-    //     &mut transcript,
-    //     &mut rng,
-    //     &C,
-    //     r,
-    //     a.clone(),
-    //     b.clone(),
-    //     G.clone(),
-    //     &F,
-    //     &B,
-    // )
+    let mut rng = rand::thread_rng();
+    let n = 1024_usize;
+    let bp_gens = BulletproofGens::new(n, 1);
+    // Calls `.G()` on generators, which should be a pub(crate) function only.
+    // For now, make that function public so it can be accessed from benches.
+    // We don't want to use bp_gens directly because we don't need the H generators.
+    let G: Vec<RistrettoPoint> = bp_gens.share(0).G(n).cloned().collect();
+
+    let pedersen_gens = PedersenGens::default();
+    let F = pedersen_gens.B;
+    let B = pedersen_gens.B_blinding;
+
+    // a and b are the vectors for which we want to prove c = <a,b>
+    let a: Vec<_> = (0..n).map(|_| Scalar::random(&mut rng)).collect();
+    let b: Vec<_> = (0..n).map(|_| Scalar::random(&mut rng)).collect();
+
+    let mut transcript = Transcript::new(b"LinearProofBenchmark");
+
+    // C = <a, G> + r * B + <a, b> * F
+    let r: Scalar = Scalar::random(&mut rng);
+    let c = inner_product(&a, &b);
+    let C: CompressedRistretto = RistrettoPoint::vartime_multiscalar_mul(
+        a.iter().chain(iter::once(&r)).chain(iter::once(&c)),
+        G.iter().chain(iter::once(&B)).chain(iter::once(&F)),
+    )
+        .compress();
+
+    LinearProof::create(
+        &mut transcript,
+        &mut rng,
+        &C,
+        r,
+        a.clone(),
+        b.clone(),
+        G.clone(),
+        &F,
+        &B,
+    )
 }
 
 pub struct MultiProof {
@@ -80,7 +98,8 @@ pub fn gen_multipoint_proof(
     assert_eq!(polynomials.len(), z_values.len());
     assert_eq!(y_values.len(), z_values.len());
     let n = polynomials.len();
-    let r_base = Scalar::hash_from_bytes::<Sha512>(format!("{commitments:?},{z_values:?},{y_values:?}").as_bytes());
+
+    let r_base = hash_bytes_to_scalar_ng(format!("{commitments:?},{z_values:?},{y_values:?}").as_bytes());
 
     let mut r_values = Vec::with_capacity(n);
     r_values[0] = r_base;
@@ -102,8 +121,9 @@ pub fn gen_multipoint_proof(
     }
     let D = poly_g.gen_commitment();
     let dc = D.compress();
-    let t = Scalar::hash_from_bytes::<Sha512>(format!("{r_base:?},{dc:?}").as_bytes());
 
+    let t = hash_bytes_to_scalar_ng(format!("{r_base:?},{dc:?}").as_bytes());
+    
     let mut poly_g1 = Polynomial::zero();
     for i in 0..n {
 

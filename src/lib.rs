@@ -27,8 +27,6 @@ pub mod verkle2;
 pub mod ipa_multipoint;
 pub mod polynomial;
 
-type Commitment = RistrettoPoint;
-
 pub struct RunningAverage {
     total_time_usec: f64,
     pub total_measurements: usize,

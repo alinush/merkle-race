@@ -2,10 +2,9 @@ use std::cmp::max;
 use std::collections::btree_map::OccupiedEntry;
 use std::collections::BTreeMap;
 use std::ops::Neg;
-use curve25519_dalek::ristretto::RistrettoPoint;
-use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek_ng::ristretto::RistrettoPoint;
+use curve25519_dalek_ng::scalar::Scalar;
 use rand::thread_rng;
-use crate::Commitment;
 
 #[derive(Clone)]
 pub struct Polynomial {
@@ -114,7 +113,7 @@ impl Polynomial {
         ret
     }
 
-    pub fn gen_commitment(&self) -> Commitment {
+    pub fn gen_commitment(&self) -> RistrettoPoint {
         unimplemented!()
         //todo: RistrettoPoint::multiscalar_mul();
     }
