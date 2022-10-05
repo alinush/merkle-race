@@ -8,6 +8,8 @@ use curve25519_dalek::scalar::Scalar as Scalar0;
 use curve25519_dalek_ng::traits::VartimeMultiscalarMul;
 use merlin::Transcript;
 use sha2::Sha512;
+use once_cell::sync::Lazy;
+use rand::thread_rng;
 
 /*
 what's the poly?
@@ -19,8 +21,8 @@ so how many bits do a point take? 32
 how many bits do a scalar take? 32
 
  */
-type PolyFieldElement = Scalar;
-type Commitment = RistrettoPoint;
+pub type PolyFieldElement = Scalar;
+pub type Commitment = RistrettoPoint;
 
 type SingleProof = LinearProof;
 
@@ -41,44 +43,53 @@ pub fn hash_bytes_to_scalar_ng(bytes: &[u8]) -> Scalar {
     Scalar::from_bits(v0.to_bytes())
 }
 
-pub fn gen_proof(polynomial: &Polynomial, x: Scalar, y: Scalar) -> LinearProof {
-    let mut rng = rand::thread_rng();
-    let n = 1024_usize;
-    let bp_gens = BulletproofGens::new(n, 1);
-    // Calls `.G()` on generators, which should be a pub(crate) function only.
-    // For now, make that function public so it can be accessed from benches.
-    // We don't want to use bp_gens directly because we don't need the H generators.
-    let G: Vec<RistrettoPoint> = bp_gens.share(0).G(n).cloned().collect();
+pub static G: Lazy<Vec<RistrettoPoint>> = Lazy::new(|| {
+    (0..1024).map(|_i|RistrettoPoint::random(&mut thread_rng())).collect()
+});
 
-    let pedersen_gens = PedersenGens::default();
-    let F = pedersen_gens.B;
-    let B = pedersen_gens.B_blinding;
+pub static F: Lazy<RistrettoPoint> = Lazy::new(||RistrettoPoint::random(&mut thread_rng()));
 
-    // a and b are the vectors for which we want to prove c = <a,b>
-    let a: Vec<_> = (0..n).map(|_| Scalar::random(&mut rng)).collect();
-    let b: Vec<_> = (0..n).map(|_| Scalar::random(&mut rng)).collect();
+pub static B: Lazy<RistrettoPoint> = Lazy::new(||RistrettoPoint::random(&mut thread_rng()));
+
+pub fn gen_proof(polynomial:&Polynomial, r:&Scalar, commitment:&Commitment, x:Scalar, y:Scalar) -> LinearProof {
+    let n = polynomial.degree()+1;
+
+    // a
+    let mut a: Vec<Scalar> = Vec::with_capacity(n);
+    for i in 0..n {
+        a[i] = polynomial.coefficient(i);
+    }
+
+    // b
+    let mut b: Vec<Scalar> = Vec::with_capacity(n);
+    b[0] = Scalar::one();
+    for i in 1..n {
+        b[i] = b[i-1]*x;
+    }
 
     let mut transcript = Transcript::new(b"LinearProofBenchmark");
 
-    // C = <a, G> + r * B + <a, b> * F
-    let r: Scalar = Scalar::random(&mut rng);
     let c = inner_product(&a, &b);
+    let B_value = B.clone();
+    let F_value = F.clone();
+    let G_value = G.clone();
+
+    // C = <a, G> + r * B + <a, b> * F = Commitment + <a,b>*F
     let C: CompressedRistretto = RistrettoPoint::vartime_multiscalar_mul(
-        a.iter().chain(iter::once(&r)).chain(iter::once(&c)),
-        G.iter().chain(iter::once(&B)).chain(iter::once(&F)),
-    )
-        .compress();
+        iter::once(&Scalar::one()).chain(iter::once(&c)),
+        iter::once(commitment).chain(iter::once(&F_value)),
+    ).compress();
 
     LinearProof::create(
         &mut transcript,
-        &mut rng,
+        &mut thread_rng(),
         &C,
-        r,
-        a.clone(),
-        b.clone(),
-        G.clone(),
-        &F,
-        &B,
+        r.clone(),
+        a,
+        b,
+        G_value,
+        &F_value,
+        &B_value,
     )
 }
 
@@ -119,7 +130,9 @@ pub fn gen_multipoint_proof(
         quotient.mul_scalar(&r_values[i]);
         poly_g.add(&quotient);
     }
-    let D = poly_g.gen_commitment();
+    let g_com_r = poly_g.gen_random_factor();
+    let D = poly_g.gen_commitment(&g_com_r);
+
     let dc = D.compress();
 
     let t = hash_bytes_to_scalar_ng(format!("{r_base:?},{dc:?}").as_bytes());
@@ -134,8 +147,11 @@ pub fn gen_multipoint_proof(
     }
 
     let y = poly_g1.evaluate(t);
-    let pi = gen_proof(&poly_g1, t, y);
-    let rho = gen_proof(&poly_g, t, poly_g.evaluate(t));
+    let g1_com_r = poly_g1.gen_random_factor();
+    let g1_commitment = poly_g1.gen_commitment(&g1_com_r);
+
+    let pi = gen_proof(&poly_g1, &g1_com_r, &g1_commitment, t, y);
+    let rho = gen_proof(&poly_g, &g_com_r,&D, t, poly_g.evaluate(t));
 
     MultiProof {
         D,
@@ -147,12 +163,12 @@ pub fn gen_multipoint_proof(
 
 
 #[test]
-fn t1() {
-    let mut x = Scalar::one();
-    let b = Scalar::one()+Scalar::one();
-    let mut i = 0;
-    for i in 0..500 {
-        x *= b;
-        println!("i={i}, x={x:?}");
-    }
+fn test_gen_proof() {
+    let poly = Polynomial::rand(1023);
+    let r = poly.gen_random_factor();
+    let commitment = poly.gen_commitment(&r);
+    let x = Scalar::from(5_u8);
+    let y = poly.evaluate(x.clone());
+    let proof = gen_proof(&poly, &r, &commitment, x.clone(), y);
+    println!("{proof:?}");
 }

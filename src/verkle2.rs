@@ -16,6 +16,8 @@ use curve25519_dalek::scalar::Scalar;
 use more_asserts::assert_ge;
 use once_cell::sync::Lazy;
 use sha2::{Sha256, Sha512, Digest};
+use crate::ipa_multipoint::{Commitment, gen_multipoint_proof, PolyFieldElement};
+use crate::polynomial::Polynomial;
 
 pub type UserKey = Vec<u8>;
 pub type UserValue = Vec<u8>;
@@ -343,10 +345,16 @@ impl<'a> VerkleKvStore<'a> {
     }
 
     pub fn get_proof(&mut self, version:u64, keys: Vec<UserKey>) -> Proof {
-        unimplemented!()
+        let nodes: Vec<TreeNode> = vec![];
+        let commitments: Vec<Commitment> = vec![];
+        let polynomials: Vec<Polynomial> = vec![];//poly_i(path_i)=y_values[i]
+        let z_values: Vec<PolyFieldElement> = vec![];//segmented path
+        let y_values: Vec<PolyFieldElement> = vec![];//commit[1..-1]
+        let proof = gen_multipoint_proof(&commitments, &polynomials, &z_values, &y_values);
         /*
 
          */
+        unimplemented!();
     }
 
     fn hash_version_key(&self, version: u64, key: UserKey) -> HashValue {

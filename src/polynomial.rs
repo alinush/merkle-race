@@ -1,10 +1,14 @@
 use std::cmp::max;
 use std::collections::btree_map::OccupiedEntry;
 use std::collections::BTreeMap;
+use std::fmt::format;
+use core::iter;
 use std::ops::Neg;
 use curve25519_dalek_ng::ristretto::RistrettoPoint;
 use curve25519_dalek_ng::scalar::Scalar;
+use curve25519_dalek_ng::traits::VartimeMultiscalarMul;
 use rand::thread_rng;
+use crate::ipa_multipoint::{B, G, hash_bytes_to_scalar_ng};
 
 #[derive(Clone, Debug)]
 pub struct Polynomial {
@@ -112,9 +116,21 @@ impl Polynomial {
         ret
     }
 
-    pub fn gen_commitment(&self) -> RistrettoPoint {
-        unimplemented!()
-        //todo: RistrettoPoint::multiscalar_mul();
+    pub fn gen_random_factor(&self) -> Scalar {
+        let s = format!("{:?}", self.coefficients);
+        let bytes = s.as_bytes();
+        hash_bytes_to_scalar_ng(bytes)
+    }
+
+    pub fn gen_commitment(&self, random_factor:&Scalar) -> RistrettoPoint {
+        let G_value = G.clone();
+        let B_value = B.clone();
+        let coefs:Vec<Scalar> = (0..self.degree+1).map(|i|self.coefficient(i)).collect();
+
+        RistrettoPoint::vartime_multiscalar_mul(
+            coefs.iter().chain(iter::once(random_factor)),
+            G_value.iter().chain(iter::once(&B_value)),
+        )
     }
 }
 
