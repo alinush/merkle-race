@@ -11,16 +11,6 @@ use sha2::Sha512;
 use once_cell::sync::Lazy;
 use rand::thread_rng;
 
-/*
-what's the poly?
-in a verkle tree we have f_root[0]=child0, f_root[1]=child1...
-degree of f = arity of the tree.
-A child is a scalar. A root is a point.
-the lower root will be converted to a higher child using point to bytes to scalar hash.
-so how many bits do a point take? 32
-how many bits do a scalar take? 32
-
- */
 pub type PolyFieldElement = Scalar;
 pub type Commitment = RistrettoPoint;
 
