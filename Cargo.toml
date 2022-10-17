@@ -47,6 +47,10 @@ debug = true    # for cargo flamegraph to be able to profile in release mode
 #name = "realworld"
 #harness = false
 
+#[[bench]]
+#name = "deps"
+#harness = false
+
 [[bench]]
-name = "deps"
+name = "rocksdb"
 harness = false

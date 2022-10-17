@@ -135,6 +135,7 @@ impl Polynomial {
 }
 
 pub fn poly_mul(a:&Polynomial, b:&Polynomial) -> Polynomial {
+    //TODO: FFT
     let mut ret = Polynomial::zero();
     for (d1,c1) in a.coefficients.iter() {
         for (d2,c2) in b.coefficients.iter() {

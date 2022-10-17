@@ -26,6 +26,7 @@ pub mod verkle;
 pub mod verkle2;
 pub mod ipa_multipoint;
 pub mod polynomial;
+pub mod misc;
 
 pub struct RunningAverage {
     total_time_usec: f64,
